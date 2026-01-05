@@ -1,0 +1,86 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    ports:
+      - "2181:2181"
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"      # internal listener
+      - "29092:29092"    # external listener
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
+  redis:
+    image: redis:7.0.11
+    container_name: redis
+    ports:
+      - "6379:6379"
+
+  mongodb:
+    image: mongo:6
+    container_name: mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: password
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  notification-server:
+    build: ./notification-server
+    container_name: notification-server
+    restart: always
+    environment:
+      MONGO_URL: mongodb://root:password@mongodb:27017/notification?authSource=admin
+      KAFKA_BROKER: kafka:9092
+      KAFKA_NOTIFICATION_TOPIC: send_notification
+    depends_on:
+      - kafka
+      - mongodb
+    ports:
+      - "5001:5001"
+
+  frontend:
+    build:
+      context: ./viona
+      args:
+        # ✅ Pass NEXT_PUBLIC_* variables as build arguments
+        NEXT_PUBLIC_NOTIFICATION_SERVER_URL: http://localhost:5001
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+        NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME: ${NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME}
+        NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
+        NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
+    container_name: viona-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      # Runtime environment variables (server-side only)
+      NODE_ENV: production
+      KAFKA_BROKER: kafka:9092
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379 
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+    depends_on:
+      - kafka
+      - notification-server
+      - redis
+
+volumes:
+  mongodb_data:
