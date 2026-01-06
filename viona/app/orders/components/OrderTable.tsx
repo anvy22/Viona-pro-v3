@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import type { Order } from "../../api/orders/route";
+import { is } from "date-fns/locale";
 
 type SortKey = "id" | "orderDate" | "totalAmount" | "status";
 
@@ -53,6 +54,7 @@ interface OrderTableProps {
   sortBy: SortKey;
   sortOrder: "asc" | "desc";
   onSort: (field: SortKey, order: "asc" | "desc") => void;
+  isEmployee:boolean;
 }
 
 const getStatusColor = (status: string) => {
@@ -83,6 +85,7 @@ export function OrderTable({
   sortBy,
   sortOrder,
   onSort,
+  isEmployee,
 }: OrderTableProps) {
   const canSelect = Boolean(onDelete);
 
@@ -130,7 +133,7 @@ export function OrderTable({
                 {/* ✅ Checkbox header ONLY if allowed */}
                 {canSelect && (
                   <TableHead className="w-12">
-                    <Checkbox
+                    { !isEmployee &&(<Checkbox
                       checked={
                         allSelected
                           ? true
@@ -139,7 +142,7 @@ export function OrderTable({
                           : false
                       }
                       onCheckedChange={handleSelectAll}
-                    />
+                    />)}
                   </TableHead>
                 )}
 

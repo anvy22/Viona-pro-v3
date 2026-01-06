@@ -22,13 +22,16 @@ import type { Product } from "../api/inventory/products/route";
 import { LoadingSpinner } from "@/components/LoadingSpinner";
 
 
+import { getRole } from "@/app/orders/actions"; 
 
 export default function InventoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false); 
   const [error, setError] = useState<string | null>(null);
   const [isErrorVisible, setIsErrorVisible] = useState(false);
+
   const [filters, setFilters] = useState<FilterState>({
     search: "",
     sortBy: "name",
@@ -36,13 +39,41 @@ export default function InventoryPage() {
     stockFilter: "all",
   });
 
+  // RBAC state
+  const [role, setRole] = useState<string | null>(null);
+  const [roleLoading, setRoleLoading] = useState(true);
+
   // Get data from Zustand store - organizations are now loaded globally
   const { selectedOrgId, orgs, setSelectedOrgId } = useOrgStore();
 
   // Organization selection handler
-  const selectOrganization = useCallback((orgId: string | null) => {
-    setSelectedOrgId(orgId);
-  }, [setSelectedOrgId]);
+  const selectOrganization = useCallback(
+    (orgId: string | null) => {
+      setSelectedOrgId(orgId);
+    },
+    [setSelectedOrgId]
+  );
+
+  // RBAC: fetch role whenever org changes
+  useEffect(() => {
+    if (!selectedOrgId) {
+      setRole(null);
+      return;
+    }
+
+    setRoleLoading(true);
+    getRole(selectedOrgId)
+      .then(setRole)
+      .catch(() => setRole(null))
+      .finally(() => setRoleLoading(false));
+  }, [selectedOrgId]);
+
+  // can helper (same semantics as Orders)
+  const can = (allowed: string[]) => {
+    if (!role) return false;
+    if (role === "admin") return true;
+    return allowed.includes(role);
+  };
 
   // Auto-hide error after 5 seconds with smooth animation
   useEffect(() => {
@@ -58,39 +89,53 @@ export default function InventoryPage() {
     }
   }, [error]);
 
-  const fetchProducts = async () => {
-    if (!selectedOrgId) {
-      setProducts([]); // Clear products when no org selected
-      return;
-    }
-
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const res = await fetch(`/api/inventory/products?orgId=${selectedOrgId}`);
-      if (!res.ok) {
-        if (res.status === 404) {
-          setProducts([]);
-          return;
-        }
-        throw new Error(`Failed to fetch products: ${res.status}`);
+  const fetchProducts = useCallback(
+    async (showRefreshing = false) => {
+      if (!selectedOrgId) {
+        setProducts([]); // Clear products when no org selected
+        return;
       }
-      
-      const data: Product[] = await res.json();
-      setProducts(Array.isArray(data) ? data : []);
-    } catch (fetchError) {
-      console.error('Fetch products error:', fetchError);
-      setProducts([]);
-      setError(fetchError instanceof Error ? fetchError.message : "Failed to load products. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+
+      if (showRefreshing) {
+        setIsRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+      setError(null);
+
+      try {
+        const res = await fetch(
+          `/api/inventory/products?orgId=${selectedOrgId}`
+        );
+        if (!res.ok) {
+          if (res.status === 404) {
+            setProducts([]);
+            return;
+          }
+          throw new Error(`Failed to fetch products: ${res.status}`);
+        }
+
+        const data: Product[] = await res.json();
+        setProducts(Array.isArray(data) ? data : []);
+      } catch (fetchError) {
+        console.error("Fetch products error:", fetchError);
+        setProducts([]);
+        setError(
+          fetchError instanceof Error
+            ? fetchError.message
+            : "Failed to load products. Please try again."
+        );
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
+      }
+    },
+    [selectedOrgId]
+  );
 
   useEffect(() => {
     fetchProducts();
-  }, [selectedOrgId]);
+  }, [fetchProducts]);
 
   const filteredProducts = useMemo(() => {
     if (!Array.isArray(products) || products.length === 0) {
@@ -101,9 +146,10 @@ export default function InventoryPage() {
 
     if (filters.search) {
       const searchTerm = filters.search.toLowerCase();
-      filtered = filtered.filter((product) =>
-        product.name.toLowerCase().includes(searchTerm) ||
-        product.sku.toLowerCase().includes(searchTerm)
+      filtered = filtered.filter(
+        (product) =>
+          product.name.toLowerCase().includes(searchTerm) ||
+          product.sku.toLowerCase().includes(searchTerm)
       );
     }
 
@@ -132,7 +178,9 @@ export default function InventoryPage() {
       } else if (typeof aVal === "number" && typeof bVal === "number") {
         comparison = aVal - bVal;
       } else {
-        comparison = new Date(aVal as string).getTime() - new Date(bVal as string).getTime();
+        comparison =
+          new Date(aVal as string).getTime() -
+          new Date(bVal as string).getTime();
       }
 
       return filters.sortOrder === "asc" ? comparison : -comparison;
@@ -141,9 +189,17 @@ export default function InventoryPage() {
     return filtered;
   }, [products, filters]);
 
-  const handleAddProduct = async (newProduct: Omit<Product, "id" | "createdAt" | "updatedAt">) => {
+  const handleAddProduct = async (
+    newProduct: Omit<Product, "id" | "createdAt" | "updatedAt">
+  ) => {
     if (!selectedOrgId) {
       setError("Please select an organization first");
+      return;
+    }
+
+    // RBAC: e.g. admin, manager, employee can add
+    if (!can(["manager", "employee"])) {
+      setError("You do not have permission to add products.");
       return;
     }
 
@@ -153,8 +209,10 @@ export default function InventoryPage() {
       await fetchProducts(); // Refresh the products list
       setIsDialogOpen(false);
     } catch (addError) {
-      console.error('Add product error:', addError);
-      setError(addError instanceof Error ? addError.message : "Failed to add product");
+      console.error("Add product error:", addError);
+      setError(
+        addError instanceof Error ? addError.message : "Failed to add product"
+      );
     }
   };
 
@@ -164,19 +222,38 @@ export default function InventoryPage() {
       return;
     }
 
+    // RBAC: e.g. only admin + manager can delete
+    if (!can(["manager"])) {
+      setError("You do not have permission to delete products.");
+      return;
+    }
+
     try {
       setError(null);
       await deleteProduct(selectedOrgId, id);
       await fetchProducts(); // Refresh the products list
     } catch (deleteError) {
-      console.error('Delete product error:', deleteError);
-      setError(deleteError instanceof Error ? deleteError.message : "Failed to delete product");
+      console.error("Delete product error:", deleteError);
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Failed to delete product"
+      );
     }
   };
 
-  const handleUpdateProduct = async (id: string, updatedProduct: Omit<Product, "id" | "createdAt" | "updatedAt">) => {
+  const handleUpdateProduct = async (
+    id: string,
+    updatedProduct: Omit<Product, "id" | "createdAt" | "updatedAt">
+  ) => {
     if (!selectedOrgId) {
       setError("Please select an organization first");
+      return;
+    }
+
+    
+    if (!can(["manager","admin"])) {
+      setError("You do not have permission to update products.");
       return;
     }
 
@@ -185,8 +262,12 @@ export default function InventoryPage() {
       await updateProduct(selectedOrgId, id, updatedProduct);
       await fetchProducts(); // Refresh the products list
     } catch (updateError) {
-      console.error('Update product error:', updateError);
-      setError(updateError instanceof Error ? updateError.message : "Failed to update product");
+      console.error("Update product error:", updateError);
+      setError(
+        updateError instanceof Error
+          ? updateError.message
+          : "Failed to update product"
+      );
     }
   };
 
@@ -220,27 +301,30 @@ export default function InventoryPage() {
               </SignedIn>
             </div>
           </header>
-          
+
           <div className="flex-1 flex items-center justify-center p-4">
             <div className="text-center max-w-md mx-auto">
               <div className="mb-6">
                 <Building2 className="h-20 w-20 mx-auto text-muted-foreground mb-6" />
-                <h2 className="text-3xl font-bold mb-4">Create an Organization to Get Started</h2>
+                <h2 className="text-3xl font-bold mb-4">
+                  Create an Organization to Get Started
+                </h2>
                 <p className="text-muted-foreground text-lg mb-8">
-                  You need to create an organization first before you can manage inventory. 
-                  Organizations help you organize your products, orders, and team members.
+                  You need to create an organization first before you can manage
+                  inventory. Organizations help you organize your products,
+                  orders, and team members.
                 </p>
-                
+
                 <div className="space-y-4">
-                  <Button 
-                    onClick={() => window.location.href = '/organization'}
+                  <Button
+                    onClick={() => (window.location.href = "/organization")}
                     size="lg"
                     className="w-full"
                   >
                     <Plus className="h-5 w-5 mr-2" />
                     Create Your First Organization
                   </Button>
-                  
+
                   <div className="text-sm text-muted-foreground">
                     <p>Once you create an organization, you can:</p>
                     <ul className="mt-2 space-y-1 text-left">
@@ -289,12 +373,15 @@ export default function InventoryPage() {
             <div className="text-center max-w-md mx-auto">
               <div className="mb-6">
                 <Building2 className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                <h2 className="text-2xl font-semibold mb-2">Select an Organization</h2>
+                <h2 className="text-2xl font-semibold mb-2">
+                  Select an Organization
+                </h2>
                 <p className="text-muted-foreground mb-6">
-                  You have {orgs.length} organization{orgs.length === 1 ? '' : 's'} available. 
-                  Please select one from the dropdown above to manage your inventory.
+                  You have {orgs.length} organization
+                  {orgs.length === 1 ? "" : "s"} available. Please select one
+                  from the dropdown above to manage your inventory.
                 </p>
-                
+
                 <div className="space-y-4">
                   <div className="text-sm text-muted-foreground">
                     <p>Available organizations:</p>
@@ -305,7 +392,9 @@ export default function InventoryPage() {
                         </li>
                       ))}
                       {orgs.length > 3 && (
-                        <li className="text-xs">... and {orgs.length - 3} more</li>
+                        <li className="text-xs">
+                          ... and {orgs.length - 3} more
+                        </li>
                       )}
                     </ul>
                   </div>
@@ -346,11 +435,11 @@ export default function InventoryPage() {
         <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
           {/* Error Alert with smooth animation */}
           {error && (
-            <div 
+            <div
               className={`transition-all duration-300 ease-in-out transform ${
-                isErrorVisible 
-                  ? 'opacity-100 translate-y-0 scale-100' 
-                  : 'opacity-0 -translate-y-2 scale-95'
+                isErrorVisible
+                  ? "opacity-100 translate-y-0 scale-100"
+                  : "opacity-0 -translate-y-2 scale-95"
               }`}
             >
               <Alert variant="destructive" className="relative">
@@ -371,15 +460,18 @@ export default function InventoryPage() {
           )}
 
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
-            <Button
-              onClick={() => setIsDialogOpen(true)}
-              className="w-full sm:w-auto"
-              disabled={isLoading}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Product
-            </Button>
-            
+            {/* RBAC: Add Product visible only for allowed roles */}
+            {can(["manager", "employee"]) && (
+              <Button
+                onClick={() => setIsDialogOpen(true)}
+                className="w-full sm:w-auto"
+                disabled={isLoading || roleLoading}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Product
+              </Button>
+            )}
+
             {/* Only show filters if we have products or are loading */}
             {(products.length > 0 || isLoading) && (
               <InventoryFilters
@@ -393,23 +485,29 @@ export default function InventoryPage() {
 
           {/* Loading State */}
           {isLoading ? (
-            <LoadingSpinner/>
+            <LoadingSpinner />
           ) : products.length === 0 ? (
             /* Empty State - No Products */
             <div className="flex items-center justify-center py-12">
               <div className="text-center max-w-md mx-auto">
                 <Package className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-xl font-semibold mb-2">No Products Yet</h3>
+                <h3 className="text-xl font-semibold mb-2">
+                  No Products Yet
+                </h3>
                 <p className="text-muted-foreground mb-6">
-                  Get started by adding your first product to the inventory. You can track stock levels, prices, and manage your product catalog.
+                  Get started by adding your first product to the inventory. You
+                  can track stock levels, prices, and manage your product
+                  catalog.
                 </p>
-                <Button
-                  onClick={() => setIsDialogOpen(true)}
-                  className="w-full sm:w-auto"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Your First Product
-                </Button>
+                {can(["manager", "employee"]) && (
+                  <Button
+                    onClick={() => setIsDialogOpen(true)}
+                    className="w-full sm:w-auto"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Your First Product
+                  </Button>
+                )}
               </div>
             </div>
           ) : (
@@ -422,12 +520,14 @@ export default function InventoryPage() {
                   </p>
                   <Button
                     variant="outline"
-                    onClick={() => setFilters({
-                      search: "",
-                      sortBy: "name",
-                      sortOrder: "asc",
-                      stockFilter: "all",
-                    })}
+                    onClick={() =>
+                      setFilters({
+                        search: "",
+                        sortBy: "name",
+                        sortOrder: "asc",
+                        stockFilter: "all",
+                      })
+                    }
                     className="mt-4"
                   >
                     Clear Filters
@@ -436,15 +536,26 @@ export default function InventoryPage() {
               ) : (
                 <ProductTable
                   products={filteredProducts}
-                  onDelete={handleDeleteProduct}
-                  onUpdate={handleUpdateProduct}
+                  onDelete={
+                    can(["manager"])
+                      ? handleDeleteProduct
+                      : undefined
+                  }
+                  onUpdate={
+                    can(["admin", "manager", "employee"])
+                      ? handleUpdateProduct
+                      : undefined
+                  }
+                  isLoading={isRefreshing}
+                  isEmployee={role === "employee"}
                 />
               )}
             </>
           )}
 
           <AddProductDialog
-            open={isDialogOpen}
+            // RBAC: disallow dialog opening if user cannot add
+            open={isDialogOpen && can(["manager", "employee"])}
             onOpenChange={setIsDialogOpen}
             onSave={handleAddProduct}
             orgId={selectedOrgId}
