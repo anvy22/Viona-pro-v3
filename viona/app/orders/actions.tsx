@@ -607,6 +607,10 @@ export async function updateOrder(orgId: string, id: string, updatedOrder: any) 
   }
 }
 
+export async function getRole(orgId: string) {
+  return await getUserRole(orgId);
+}
+
 export async function deleteOrder(orgId: string, id: string) {
   const { userId } = auth();
   if (!userId) throw new Error('Unauthorized');

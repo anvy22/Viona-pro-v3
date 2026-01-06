@@ -9,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 
 export interface FilterState {
   search: string;
-  sortBy: "orderDate" | "totalAmount" | "status";
+  sortBy: "id" | "orderDate" | "totalAmount" | "status";
   sortOrder: "asc" | "desc";
   statusFilter: "all" | "pending" | "shipped" | "completed" | "cancelled";
   dateFrom: string | null;

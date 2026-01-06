@@ -744,8 +744,8 @@ export default function NotificationsPage() {
                     {search
                       ? "No notifications match your search."
                       : filter === "unread"
-                      ? "You're all caught up!"
-                      : "You'll see updates here once there's activity."}
+                        ? "You're all caught up!"
+                        : "You'll see updates here once there's activity."}
                   </p>
                 </Card>
               )}
@@ -760,9 +760,8 @@ export default function NotificationsPage() {
                       return (
                         <Card
                           key={n.id}
-                          className={`border-0 rounded-none px-4 py-5 flex items-start gap-4 hover:bg-accent/40 transition ${
-                            !n.read ? "bg-accent/20" : ""
-                          } ${isProcessing ? "opacity-50" : ""}`}
+                          className={`border-0 rounded-none px-4 py-5 flex items-start gap-4 hover:bg-accent/40 transition ${!n.read ? "bg-accent/20" : ""
+                            } ${isProcessing ? "opacity-50" : ""}`}
                         >
                           <div className="p-3 rounded-xl bg-accent flex items-center justify-center flex-shrink-0">
                             <Icon className="h-4 w-4 text-primary" />
@@ -774,9 +773,8 @@ export default function NotificationsPage() {
                                 {n.title}
                               </h3>
                               <span
-                                className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                                  priorityColors[n.priority]
-                                }`}
+                                className={`w-3 h-3 rounded-full flex-shrink-0 ${priorityColors[n.priority]
+                                  }`}
                                 title={`Priority: ${n.priority}`}
                               />
                             </div>

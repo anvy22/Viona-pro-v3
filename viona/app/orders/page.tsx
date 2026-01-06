@@ -20,7 +20,7 @@ import { EmptyState } from "./components/EmptyState";
 import { LoadingSpinner } from "./components/LoadingSpinner";
 import { ErrorAlert } from "./components/ErrorAlert";
 import { BulkActionsBar } from "./components/BulkActionsBar";
-import { addOrder, updateOrder, deleteOrder, bulkUpdateOrders } from "./actions";
+import { addOrder, updateOrder, deleteOrder, bulkUpdateOrders, getRole } from "./actions";
 import type { Order } from "../api/orders/route";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
@@ -35,12 +35,14 @@ export default function OrdersPage() {
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<FilterState>({
     search: "",
-    sortBy: "order_date",
+    sortBy: "orderDate",
     sortOrder: "desc",
     statusFilter: "all",
     dateFrom: null,
     dateTo: null,
   });
+  const [role,setRole] = useState<string | null>(null);
+  const [roleLoading,setRoleLoading] = useState(true);
 
   const { selectedOrgId, orgs, setSelectedOrgId } = useOrgStore();
 
@@ -57,6 +59,17 @@ export default function OrdersPage() {
       return () => clearTimeout(timer);
     }
   }, [error]);
+
+  useEffect(() => {
+    if (!selectedOrgId) return;
+  
+    setRoleLoading(true);
+  
+    getRole(selectedOrgId)
+      .then(setRole)
+      .catch(() => setRole(null))
+      .finally(() => setRoleLoading(false));
+  }, [selectedOrgId]);
 
   const fetchOrders = useCallback(async (showRefreshing = false) => {
     if (!selectedOrgId) {
@@ -95,6 +108,12 @@ export default function OrdersPage() {
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  const can = (allowed: string[]) => {
+    if (!role) return false;
+    if (role === 'admin') return true;
+    return allowed.includes(role);
+  };
 
   const filteredOrders = useMemo(() => {
     if (!Array.isArray(orders)) return [];
@@ -371,14 +390,14 @@ export default function OrdersPage() {
             )}
 
             {/* Stats Cards */}
-            {orders.length > 0 && (
+            {can(['admin','manager']) && orders.length > 0 && (
               <OrderStats orders={orders} />
             )}
 
             {/* Actions Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 gap-4">
               <div className="flex items-center gap-2 flex-wrap">
-                <Button 
+               {can(['admin','manager','employee']) && ( <Button 
                   onClick={() => { 
                     setEditingOrder(null); 
                     setIsDialogOpen(true); 
@@ -388,7 +407,7 @@ export default function OrdersPage() {
                 >
                   <Plus className="h-4 w-4 mr-2" />
                   Add Order
-                </Button>
+                </Button>)}
                 
                 <Button
                   variant="outline"
@@ -400,7 +419,7 @@ export default function OrdersPage() {
                   Refresh
                 </Button>
 
-                {filteredOrders.length > 0 && (
+                { can(['admin','manager']) && filteredOrders.length > 0 && (
                   <Button
                     variant="outline"
                     onClick={handleExport}
@@ -425,7 +444,7 @@ export default function OrdersPage() {
             </div>
 
             {/* Bulk Actions */}
-            {selectedOrderIds.size > 0 && (
+            {can(['admin','manager']) && selectedOrderIds.size > 0 && (
               <BulkActionsBar
                 selectedCount={selectedOrderIds.size}
                 onStatusUpdate={handleBulkStatusUpdate}
@@ -448,7 +467,7 @@ export default function OrdersPage() {
                   variant="outline" 
                   onClick={() => setFilters({
                     search: "",
-                    sortBy: "order_date",
+                    sortBy: "orderDate",
                     sortOrder: "desc",
                     statusFilter: "all",
                     dateFrom: null,
@@ -464,7 +483,7 @@ export default function OrdersPage() {
                   orders={filteredOrders}
                   selectedIds={selectedOrderIds}
                   onSelectionChange={setSelectedOrderIds}
-                  onDelete={handleDeleteOrder}
+                  onDelete={can(['admin', 'manager']) ? handleDeleteOrder : undefined}
                   onEdit={handleEditOrder}
                   sortBy={filters.sortBy}
                   sortOrder={filters.sortOrder}
@@ -474,7 +493,7 @@ export default function OrdersPage() {
             )}
 
             <AddOrderDialog
-              open={isDialogOpen}
+              open={isDialogOpen && can(['admin','manager', 'employee'])}
               onOpenChange={setIsDialogOpen}
               onSave={handleAddOrUpdateOrder}
               initialData={editingOrder}
