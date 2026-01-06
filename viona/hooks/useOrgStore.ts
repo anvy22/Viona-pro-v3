@@ -10,6 +10,9 @@ type Org = {
   role: string;
 };
 
+export type OrgRole = "admin" | "manager" | "employee";
+
+
 type UserDetails = {
   id: string; // clerk_id
   email: string;
@@ -27,6 +30,7 @@ type Store = {
   clearStore: () => void;
   isValidSession: (currentUserId: string) => boolean;
   switchUser: (newUser: UserDetails) => void;
+  
 };
 
 export const useOrgStore = create<Store>()(
@@ -176,3 +180,11 @@ export const useOrgStore = create<Store>()(
 export const useCurrentUser = () => useOrgStore((state) => state.user);
 export const useOrganizations = () => useOrgStore((state) => state.orgs);
 export const useSelectedOrg = () => useOrgStore((state) => state.selectedOrgId);
+export const useCurrentOrgRole = (): OrgRole | undefined =>
+  useOrgStore((state) => {
+    const org = state.orgs.find(
+      (o) => o.id === state.selectedOrgId
+    );
+    return org?.role as OrgRole | undefined;
+  });
+

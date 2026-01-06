@@ -1,4 +1,3 @@
-// lib/kafka-producer.ts
 import { Kafka, Producer } from "kafkajs";
 
 if (typeof window !== "undefined") {
@@ -7,6 +6,7 @@ if (typeof window !== "undefined") {
 
 let producer: Producer | null = null;
 let isConnected = false;
+let isConnecting = false;
 
 const BROKER = process.env.KAFKA_BROKER || "localhost:29092";
 
@@ -33,40 +33,50 @@ const createProducer = () => {
     console.warn("Kafka producer disconnected");
   });
 
+  p.on(p.events.CRASH, (e) => {
+    isConnected = false;
+    console.error("Kafka producer crashed:", e);
+  });
+
   return p;
 };
 
-export const getKafkaProducer = async () => {
-  if (!producer || !isConnected) {
-    if (producer) {
-      try {
-        await producer.disconnect();
-      } catch {}
-    }
 
+const tryGetKafkaProducer = async (): Promise<Producer | null> => {
+  if (isConnected && producer) return producer;
+  if (isConnecting) return null;
+
+  isConnecting = true;
+
+  try {
+    producer?.disconnect().catch(() => {});
     producer = createProducer();
-
-    try {
-      await producer.connect();
-      isConnected = true;
-    } catch (err) {
-      isConnected = false;
-      producer = null;
-      console.error("Kafka producer connection failed:", err);
-      throw err;
-    }
+    await producer.connect();
+    isConnected = true;
+    return producer;
+  } catch (err) {
+    console.error("Kafka producer connection failed:", err);
+    producer = null;
+    isConnected = false;
+    return null;
+  } finally {
+    isConnecting = false;
   }
-
-  return producer;
 };
 
 export const sendNotification = async (payload: any) => {
   try {
-    const p = await getKafkaProducer();
+    const p = await tryGetKafkaProducer();
+    if (!p) {
+      console.warn("Kafka unavailable, notification dropped:", payload.title);
+      return;
+    }
+
     await p.send({
       topic: "send_notification",
       messages: [{ value: JSON.stringify(payload) }],
     });
+
     console.log("Notification sent:", payload.title);
   } catch (err) {
     console.error("Failed to send notification:", err);

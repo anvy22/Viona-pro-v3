@@ -483,11 +483,12 @@ export default function OrdersPage() {
                   orders={filteredOrders}
                   selectedIds={selectedOrderIds}
                   onSelectionChange={setSelectedOrderIds}
-                  onDelete={can(['admin', 'manager']) ? handleDeleteOrder : undefined}
+                  onDelete={can(['admin', 'manager','employee']) ? handleDeleteOrder : undefined}
                   onEdit={handleEditOrder}
                   sortBy={filters.sortBy}
                   sortOrder={filters.sortOrder}
                   onSort={(field, order) => setFilters(prev => ({ ...prev, sortBy: field, sortOrder: order }))}
+                  isEmployee={can(['employee'])}
                 />
               </div>
             )}

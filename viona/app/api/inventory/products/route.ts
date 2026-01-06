@@ -14,6 +14,7 @@ export type Product = {
   image: string | null;
   createdAt: string;
   updatedAt: string;
+  warehouseId?: string; 
 };
 
 /**

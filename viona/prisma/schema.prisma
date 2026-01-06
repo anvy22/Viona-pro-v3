@@ -20,6 +20,7 @@ model Organization {
   members    OrganizationMember[]
   products   Product[]
   warehouses Warehouse[]
+
 }
 
 model OrganizationInvite {

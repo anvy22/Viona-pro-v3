@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, Suspense } from "react";
-import { useParams,useRouter  } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -51,9 +51,9 @@ import { BreadcrumbHeader } from "@/components/BreadcrumbHeader";
 import { ModeToggle } from "@/components/ThemeModeToggle";
 import { NotificationDropdown } from "@/components/NotificationDropdown";
 import { SearchBar } from "@/components/SearchBar";
-import { useOrgStore } from "@/hooks/useOrgStore";
+import { useOrgStore, useCurrentOrgRole } from "@/hooks/useOrgStore";
 import { toast } from "sonner";
-import { getWarehousesWithStock } from "@/app/inventory/actions"; 
+import { getWarehousesWithStock } from "@/app/inventory/actions";
 
 import {
   getProductDetails,
@@ -180,6 +180,18 @@ export default function ProductDetailPage() {
     };
   }, [product]);
 
+  const role = useCurrentOrgRole();
+
+  const isRoleLoaded = role !== undefined;
+  const isEmployee = role === "employee";
+
+
+  const canEdit = isRoleLoaded && !isEmployee;
+  const canDelete = isRoleLoaded && !isEmployee;
+  const canManageStatus = isRoleLoaded && !isEmployee;
+  const canTransferStock = isRoleLoaded && !isEmployee;
+  const canEditImage = isRoleLoaded && !isEmployee;
+
   const metrics = useMemo(() => {
     const profitMargin =
       pricing.actual > 0
@@ -203,7 +215,7 @@ export default function ProductDetailPage() {
     return { label: "In stock", variant: "default" as const };
   }, [product]);
 
-const fetchAll = useCallback(
+  const fetchAll = useCallback(
     async (showLoading = true) => {
       if (!selectedOrgId || !productId) return;
 
@@ -214,7 +226,7 @@ const fetchAll = useCallback(
       try {
         const [p, w] = await Promise.all([
           getProductDetails(selectedOrgId, productId as string),
-           getWarehousesWithStock(selectedOrgId, productId as string),
+          getWarehousesWithStock(selectedOrgId, productId as string),
         ]);
         setProduct(p);
         setWarehouses(w || []);
@@ -253,10 +265,9 @@ const fetchAll = useCallback(
         await updateProductStatus(selectedOrgId, productId as string, status);
         await fetchAll(false); // Refresh data
         toast.success(
-          `Product ${
-            status === "active"
-              ? "activated"
-              : status === "inactive"
+          `Product ${status === "active"
+            ? "activated"
+            : status === "inactive"
               ? "deactivated"
               : "discontinued"
           } successfully`
@@ -290,8 +301,7 @@ const fetchAll = useCallback(
           image: imageUrl,
         });
         setImageUpdateTrigger((prev) => prev + 1); // Trigger re-render
-        toast.success("Product image updated successfully");
-        // Don't call fetchAll here as it's heavy, just update the local state
+        
         if (product) {
           setProduct((prev) => (prev ? { ...prev, image: imageUrl } : null));
         }
@@ -310,14 +320,11 @@ const fetchAll = useCallback(
         if (force) {
           await deactivateProduct(selectedOrgId, productId as string);
           toast.success("Product deactivated successfully");
-        } else {
-          await deleteProduct(selectedOrgId, productId as string);
-          toast.success("Product deleted successfully");
-        }
+        } 
 
         // CRITICAL: Invalidate router cache and redirect immediately
         router.refresh();
-        
+
         // Redirect without delay since product is gone
         router.push("/inventory");
       } catch (e: any) {
@@ -341,15 +348,6 @@ const fetchAll = useCallback(
     [selectedOrgId, productId, router]
   );
 
- useEffect(() => {
-    let mounted = true;
-    (async () => {
-      if (mounted) await fetchAll(true);
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [fetchAll]);
 
   const onSave = useCallback(
     async (data: any) => {
@@ -357,10 +355,10 @@ const fetchAll = useCallback(
 
       try {
         await updateProductDetails(selectedOrgId, productId as string, data);
-        
+
         // CRITICAL: Refresh router cache
         router.refresh();
-        
+
         // Refresh data
         await fetchAll(false);
         setIsEditDialogOpen(false);
@@ -425,7 +423,7 @@ const fetchAll = useCallback(
     );
   }
 
-   if (productNotFound) {
+  if (productNotFound) {
     return (
       <div className="flex h-screen overflow-hidden">
         <DesktopSidebar />
@@ -510,87 +508,94 @@ const fetchAll = useCallback(
               </Link>
               {product && (
                 <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => setIsStockTransferOpen(true)}
-                  >
-                    <Warehouse className="h-4 w-4" />
-                    Transfer Stock
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => setIsEditDialogOpen(true)}
-                  >
-                    <Edit className="h-4 w-4" />
-                    Edit
-                  </Button>
+                  {canTransferStock && (
+                    <Button
+                      variant="outline"
+                      className="gap-2"
+                      onClick={() => setIsStockTransferOpen(true)}
+                    >
+                      <Warehouse className="h-4 w-4" />
+                      Transfer Stock
+                    </Button>
+                  )}
+                  {canEdit && (
+                    <Button
+                      variant="outline"
+                      className="gap-2"
+                      onClick={() => setIsEditDialogOpen(true)}
+                    >
+                      <Edit className="h-4 w-4" />
+                      Edit
+                    </Button>
+                  )}
 
                   {/* Status Management Dropdown */}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" className="gap-2">
-                        {product.status === "active" ? (
-                          <Power className="h-4 w-4 text-green-600" />
-                        ) : product.status === "inactive" ? (
-                          <PowerOff className="h-4 w-4 text-yellow-600" />
-                        ) : (
-                          <Archive className="h-4 w-4 text-red-600" />
+                  {canManageStatus && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" className="gap-2">
+                          {product.status === "active" ? (
+                            <Power className="h-4 w-4 text-green-600" />
+                          ) : product.status === "inactive" ? (
+                            <PowerOff className="h-4 w-4 text-yellow-600" />
+                          ) : (
+                            <Archive className="h-4 w-4 text-red-600" />
+                          )}
+                          Status
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {product.status !== "active" && (
+                          <DropdownMenuItem
+                            onClick={() => handleStatusUpdate("active")}
+                            className="gap-2"
+                          >
+                            <Power className="h-4 w-4 text-green-600" />
+                            Activate Product
+                          </DropdownMenuItem>
                         )}
-                        Status
-                        <ChevronDown className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {product.status !== "active" && (
+                        {product.status !== "inactive" && (
+                          <DropdownMenuItem
+                            onClick={() => handleStatusUpdate("inactive")}
+                            className="gap-2"
+                          >
+                            <PowerOff className="h-4 w-4 text-yellow-600" />
+                            Deactivate Product
+                          </DropdownMenuItem>
+                        )}
+                        {product.status !== "discontinued" && (
+                          <DropdownMenuItem
+                            onClick={() => handleStatusUpdate("discontinued")}
+                            className="gap-2"
+                          >
+                            <Archive className="h-4 w-4 text-red-600" />
+                            Discontinue Product
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuSeparator />
+                        { }
                         <DropdownMenuItem
-                          onClick={() => handleStatusUpdate("active")}
-                          className="gap-2"
+                          onClick={() => handleDelete(true)}
+                          className="gap-2 text-destructive"
                         >
-                          <Power className="h-4 w-4 text-green-600" />
-                          Activate Product
+                          <Trash2 className="h-4 w-4" />
+                          Delete Product
                         </DropdownMenuItem>
-                      )}
-                      {product.status !== "inactive" && (
-                        <DropdownMenuItem
-                          onClick={() => handleStatusUpdate("inactive")}
-                          className="gap-2"
-                        >
-                          <PowerOff className="h-4 w-4 text-yellow-600" />
-                          Deactivate Product
-                        </DropdownMenuItem>
-                      )}
-                      {product.status !== "discontinued" && (
-                        <DropdownMenuItem
-                          onClick={() => handleStatusUpdate("discontinued")}
-                          className="gap-2"
-                        >
-                          <Archive className="h-4 w-4 text-red-600" />
-                          Discontinue Product
-                        </DropdownMenuItem>
-                      )}
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => handleDelete(true)}
-                        className="gap-2 text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        Delete Product
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
 
                   <AlertDialog
                     open={deleteDialogOpen}
                     onOpenChange={setDeleteDialogOpen}
                   >
-                    <AlertDialogTrigger asChild>
+                    { canDelete &&(<AlertDialogTrigger asChild>
                       <Button variant="destructive" className="gap-2">
                         <Trash2 className="h-4 w-4" />
                         Delete
                       </Button>
-                    </AlertDialogTrigger>
+                    </AlertDialogTrigger>)}
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>Delete Product</AlertDialogTitle>
@@ -658,7 +663,7 @@ const fetchAll = useCallback(
                           </CardDescription>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Badge variant={stockBadge.variant}>
+                          <Badge variant="outline">
                             {stockBadge.label}
                           </Badge>
                           <Badge variant="outline" className="capitalize">
@@ -735,11 +740,11 @@ const fetchAll = useCallback(
                         });
                         toast.success("Image uploaded successfully");
                       } catch (error) {
-                        toast.error("Failed to update product image");
+                        
                         console.error("Image update error:", error);
                       }
                     }}
-                    editable={true}
+                    editable={canEditImage}
                     orgId={selectedOrgId!}
                   />
                 </div>

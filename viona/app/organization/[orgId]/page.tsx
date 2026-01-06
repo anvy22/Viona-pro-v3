@@ -270,15 +270,15 @@ useEffect(() => { loadOrgData(); }, [loadOrgData]);
             <div className="p-4 md:p-8 space-y-6">
               {/* Back Button + Title */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+                <div className="flex items-center justify-between">
                   <Button
-                    variant="ghost"
-                    size="icon"
+                    variant="ghost" className="gap-2"
                     onClick={() => router.push("/organization")}
                   >
                     <ArrowLeft className="h-5 w-5" />
+                    <p> Back to Organization</p>
                   </Button>
-                  <div>
+                  <div className="pl-7">
                     <div className="flex items-center gap-3">
                       <Building2 className="h-8 w-8 text-primary" />
                       <h1 className="text-3xl font-bold">{orgDetails?.name}</h1>

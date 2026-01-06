@@ -16,17 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, Warehouse } from 'lucide-react';
 import { toast } from 'sonner';
 import { getWarehousesForDialog } from '@/app/inventory/actions';
-
-interface Product {
-  id?: string;
-  name: string;
-  sku: string;
-  stock: number;
-  price: number;
-  image?: string | null;
-  description?: string;
-  warehouseId: string;
-}
+import type { Product } from "@/app/api/inventory/products/route";
 
 interface AddProductDialogProps {
   open: boolean;

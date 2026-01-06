@@ -8,19 +8,21 @@ import { Package, Edit, Eye, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { useEffect } from "react";
 
-// Lazy load the image upload component
-const ImageUpload = dynamic(() => 
-  import("@/components/ui/image-upload").then(mod => ({ default: mod.ImageUpload })), 
-  { 
+
+
+const ImageUpload = dynamic(() =>
+  import("@/components/ui/image-upload").then(mod => ({ default: mod.ImageUpload })),
+  {
     loading: () => <div className="h-[200px] bg-muted animate-pulse rounded-lg" />,
-    ssr: false 
+    ssr: false
   }
 );
 
 interface ProductImageCardProps {
-  product: { 
-    name: string; 
+  product: {
+    name: string;
     image?: string;
     id: string;
   };
@@ -30,9 +32,9 @@ interface ProductImageCardProps {
   isUpdating?: boolean;
 }
 
-function ProductImageCardComponent({ 
-  product, 
-  onImageUpdate, 
+function ProductImageCardComponent({
+  product,
+  onImageUpdate,
   editable = false,
   orgId,
   isUpdating = false
@@ -44,7 +46,7 @@ function ProductImageCardComponent({
   const handleImageChange = async (imageUrl: string) => {
     setCurrentImage(imageUrl);
     setIsImageUploading(true);
-    
+
     try {
       if (onImageUpdate) {
         await onImageUpdate(imageUrl);
@@ -56,11 +58,14 @@ function ProductImageCardComponent({
       setIsImageUploading(false);
     }
   };
+  useEffect(() => {
+    setCurrentImage(product.image || "");
+  }, [product.image]);
 
   const handleImageRemove = async () => {
     setCurrentImage("");
     setIsImageUploading(true);
-    
+
     try {
       if (onImageUpdate) {
         await onImageUpdate("");
@@ -83,7 +88,10 @@ function ProductImageCardComponent({
           </Badge>
         </div>
         {editable && (
-          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+            if (!editable) return;
+            setIsEditDialogOpen(open);
+          }}>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" className="gap-2">
                 <Edit className="h-4 w-4" />
@@ -101,11 +109,11 @@ function ProductImageCardComponent({
                       value={currentImage}
                       onChange={handleImageChange}
                       onRemove={handleImageRemove}
-                      disabled={isImageUploading}
-                      maxSizeInMB={5}
+                      disabled={!editable || !orgId || isImageUploading || isUpdating}
+                      maxSizeInMB={10}
                       acceptedFormats={['image/jpeg', 'image/png', 'image/webp']}
                       showPreview={true}
-                      uploadPreset="viona_products" 
+                      uploadPreset="viona_products"
                       className="w-full"
                     />
                     {isImageUploading && (
@@ -157,7 +165,7 @@ function ProductImageCardComponent({
                   </DialogContent>
                 </Dialog>
               </div>
-              
+
               {/* Loading overlay when updating */}
               {(isImageUploading || isUpdating) && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
@@ -173,9 +181,9 @@ function ProductImageCardComponent({
               <Package className="h-16 w-16 mb-2" />
               <p className="text-sm font-medium">No image available</p>
               {editable && (
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
+                <Button
+                  variant="ghost"
+                  size="sm"
                   className="mt-2 gap-2"
                   onClick={() => setIsEditDialogOpen(true)}
                   disabled={isImageUploading || isUpdating}

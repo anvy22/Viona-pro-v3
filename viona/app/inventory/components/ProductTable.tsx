@@ -208,8 +208,9 @@ export function ProductTable({
   const [deleteProduct, setDeleteProduct] = useState<Product | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-  const canEdit = !!onUpdate;
-  const canDelete = !!onDelete ;
+  const canEdit = !!onUpdate && !isEmployee;
+  const canDelete = !!onDelete && !isEmployee;
+
 
 
   const handleEdit = (product: Product) => {
