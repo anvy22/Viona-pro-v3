@@ -127,7 +127,7 @@ type ProductDetails = {
   modifiedBy?: { id: string; email: string } | null;
   warehouses: Array<{
     id: string;
-    name: string;
+    name: string | null;
     address?: string;
     stock: number;
   }>;
@@ -301,7 +301,7 @@ export default function ProductDetailPage() {
           image: imageUrl,
         });
         setImageUpdateTrigger((prev) => prev + 1); // Trigger re-render
-        
+
         if (product) {
           setProduct((prev) => (prev ? { ...prev, image: imageUrl } : null));
         }
@@ -320,7 +320,7 @@ export default function ProductDetailPage() {
         if (force) {
           await deactivateProduct(selectedOrgId, productId as string);
           toast.success("Product deactivated successfully");
-        } 
+        }
 
         // CRITICAL: Invalidate router cache and redirect immediately
         router.refresh();
@@ -590,7 +590,7 @@ export default function ProductDetailPage() {
                     open={deleteDialogOpen}
                     onOpenChange={setDeleteDialogOpen}
                   >
-                    { canDelete &&(<AlertDialogTrigger asChild>
+                    {canDelete && (<AlertDialogTrigger asChild>
                       <Button variant="destructive" className="gap-2">
                         <Trash2 className="h-4 w-4" />
                         Delete
@@ -740,7 +740,7 @@ export default function ProductDetailPage() {
                         });
                         toast.success("Image uploaded successfully");
                       } catch (error) {
-                        
+
                         console.error("Image update error:", error);
                       }
                     }}
@@ -831,7 +831,10 @@ export default function ProductDetailPage() {
                                 </CardHeader>
                                 <CardContent>
                                   <StockDistributionChart
-                                    data={product.warehouses}
+                                    data={product.warehouses.map(w => ({
+                                      name: w.name ?? "Unknown Warehouse",
+                                      stock: w.stock,
+                                    }))}
                                   />
                                 </CardContent>
                               </Card>

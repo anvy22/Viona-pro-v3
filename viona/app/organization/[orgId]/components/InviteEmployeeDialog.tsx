@@ -24,7 +24,6 @@ const ROLES = [
   { value: "admin", label: "Admin", description: "Full access to all features" },
   { value: "manager", label: "Manager", description: "Manage inventory and orders" },
   { value: "employee", label: "Employee", description: "View and update inventory" },
-  { value: "viewer", label: "Viewer", description: "View-only access" },
 ];
 
 interface InviteEmployeeDialogProps {

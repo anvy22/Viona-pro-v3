@@ -5,7 +5,7 @@ import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from "recharts";
 
 const COLORS = ["#8884d8", "#82ca9d", "#ffc658", "#ff7300", "#8dd1e1", "#d084d0"];
 
-type Datum = { id: string; name: string; stock: number };
+type Datum = { name: string; stock: number };
 
 function StockDistributionChart({ data }: { data: Datum[] }) {
   const total = data.reduce((a, d) => a + d.stock, 0);
