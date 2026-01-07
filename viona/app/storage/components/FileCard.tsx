@@ -18,16 +18,36 @@ export default function FileCard({ file, selected, onClick, onContextMenu }: Fil
             onClick={onClick}
             onContextMenu={onContextMenu}
             className={cn(
-                "group relative bg-card border rounded-xl transition-all cursor-pointer overflow-hidden flex flex-col",
-                selected
-                    ? "border-primary ring-1 ring-primary"
-                    : "border-card-border hover:bg-white/5 hover:border-white/10"
+                // Base layout & Animation Physics
+                // 'duration-300 ease-in-out' makes the 3D lift feel smooth/heavy
+                "group relative rounded-xl transition-all duration-300 ease-in-out cursor-pointer overflow-hidden flex flex-col",
+
+                // ------------------------------------------------------------------
+                // 1. RESTING STATE (The "Dull" Look)
+                // ------------------------------------------------------------------
+                // bg-slate-50: Dull off-white background
+                // shadow-inner: Subtle depth making it look pressed in
+                !selected && "bg-slate-50 border border-slate-200 shadow-inner dark:bg-card dark:border-border dark:shadow-none",
+
+                // ------------------------------------------------------------------
+                // 2. HOVER STATE (The "3D Pop" Effect)
+                // ------------------------------------------------------------------
+                // hover:-translate-y-1: Moves the card UP by 4px
+                // hover:shadow-xl: Adds a large soft shadow underneath
+                // hover:bg-white: Brightens the background slightly (like it's catching light)
+                !selected && "hover:-translate-y-1 hover:shadow-xl hover:bg-white hover:border-slate-300 dark:hover:bg-accent/50 dark:hover:border-accent",
+
+                // ------------------------------------------------------------------
+                // 3. SELECTED STATE
+                // ------------------------------------------------------------------
+                selected && "border border-primary ring-1 ring-primary bg-primary/5 shadow-none"
             )}
         >
-            <div className="relative aspect-[4/3] bg-background w-full flex items-center justify-center overflow-hidden">
+            {/* Thumbnail Section */}
+            <div className="relative aspect-[4/3] bg-white dark:bg-muted/30 w-full flex items-center justify-center overflow-hidden border-b border-slate-100 dark:border-border">
                 {isImage ? (
-                    <div className="w-full h-full bg-gradient-to-br from-gray-800 to-gray-900 group-hover:scale-105 transition-transform duration-500 flex items-center justify-center">
-                        <Icon className="w-10 h-10 text-gray-600" />
+                    <div className="w-full h-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-muted/50 dark:to-muted group-hover:scale-105 transition-transform duration-500 flex items-center justify-center">
+                        <Icon className="w-10 h-10 text-slate-400 dark:text-muted-foreground" />
                     </div>
                 ) : (
                     <div className="w-full h-full flex items-center justify-center group-hover:scale-105 transition-transform duration-500">
@@ -40,22 +60,27 @@ export default function FileCard({ file, selected, onClick, onContextMenu }: Fil
                     </div>
                 )}
 
+                {/* Context Menu Button */}
                 <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
                             onContextMenu?.(e);
                         }}
-                        className="p-1 bg-black/50 hover:bg-black/70 text-white rounded backdrop-blur-sm"
+                        className="p-1 bg-white/90 dark:bg-black/50 hover:bg-white dark:hover:bg-black/70 text-slate-700 dark:text-white rounded backdrop-blur-sm border border-slate-200 dark:border-white/10 shadow-sm"
                     >
                         <MoreVertical className="w-4 h-4" />
                     </button>
                 </div>
             </div>
 
-            <div className={cn("p-3 border-t transition-colors", selected ? "border-primary bg-primary/5" : "border-card-border group-hover:border-white/10")}>
-                <h3 className={cn("text-sm font-medium truncate mb-1", selected ? "text-primary" : "text-gray-200")} title={file.name}>{file.name}</h3>
-                <p className="text-xs text-gray-500">{file.size} • {file.modified}</p>
+            {/* Details Section */}
+            <div className="p-3">
+                <h3 className={cn("text-sm font-medium truncate mb-1",
+                    selected ? "text-primary" : "text-slate-700 dark:text-foreground"
+                )} title={file.name}>{file.name}</h3>
+
+                <p className="text-xs text-slate-500 dark:text-muted-foreground">{file.size} • {file.modified}</p>
             </div>
         </div>
     );

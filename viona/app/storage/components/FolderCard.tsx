@@ -36,7 +36,7 @@ export default function FolderCard({ folder, selected, onClick, onDoubleClick, o
                 </button>
             </div>
             <div>
-                <h3 className={cn("text-sm font-medium truncate mb-1", selected ? "text-primary" : "text-gray-200")}>{folder.name}</h3>
+                <h3 className={cn("text-sm font-medium truncate mb-1", selected ? "text-primary" : "text-foreground")}>{folder.name}</h3>
                 <p className="text-xs text-gray-500">{folder.size} • {folder.modified}</p>
             </div>
         </div>

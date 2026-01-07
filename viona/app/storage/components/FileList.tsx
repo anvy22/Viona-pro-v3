@@ -12,7 +12,7 @@ interface FileListProps {
 export default function FileList({ items, selectedId, onSelect, onContextMenu }: FileListProps) {
     return (
         <div className="w-full">
-            <div className="grid grid-cols-[auto_2fr_1fr_1fr_1fr_auto] gap-4 px-4 py-3 text-xs font-medium text-gray-500 border-b border-[#2e3035]">
+            <div className="grid grid-cols-[auto_2fr_1fr_1fr_1fr_auto] gap-4 px-4 py-3 text-xs font-medium text-gray-500 border-b border-gray-200 dark:border-[#2e3035]">
                 <div className="w-8"></div>
                 <div>Name</div>
                 <div>Owner</div>
@@ -32,10 +32,16 @@ export default function FileList({ items, selectedId, onSelect, onContextMenu }:
                             onClick={() => onSelect?.(item)}
                             onContextMenu={(e) => onContextMenu?.(e, item)}
                             className={cn(
-                                "grid grid-cols-[auto_2fr_1fr_1fr_1fr_auto] gap-4 px-4 py-3 items-center border-b border-[#2e3035]/50 transition-colors group cursor-pointer",
+                                // Base styles
+                                "grid grid-cols-[auto_2fr_1fr_1fr_1fr_auto] gap-4 px-4 py-3 items-center border-b transition-colors group cursor-pointer",
+                                
+                                // Border colors (Light vs Dark)
+                                "border-gray-100 dark:border-[#2e3035]/50",
+
+                                // Conditional Selection and Hover styles
                                 isSelected
                                     ? "bg-primary/10 border-primary/20"
-                                    : "hover:bg-[#25262b]"
+                                    : "hover:bg-gray-100 dark:hover:bg-[#25262b]" // <--- CHANGED HERE
                             )}
                         >
                             <div className="w-8 flex items-center justify-center">
@@ -47,17 +53,17 @@ export default function FileList({ items, selectedId, onSelect, onContextMenu }:
                                                     "text-blue-500"
                                 )} />
                             </div>
-                            <div className={cn("text-sm font-medium truncate", isSelected ? "text-primary" : "text-gray-200")}>{item.name}</div>
-                            <div className="text-sm text-gray-400 truncate">{item.owner}</div>
-                            <div className="text-xs text-gray-400">{item.modified}</div>
-                            <div className="text-xs text-gray-400">{item.size}</div>
+                            <div className={cn("text-sm font-medium truncate", isSelected ? "text-primary" : "text-foreground")}>{item.name}</div>
+                            <div className="text-xs text-muted-foreground dark:text-muted-foreground truncate">{item.owner}</div>
+                            <div className="text-xs text-muted-foreground dark:text-muted-foreground">{item.modified}</div>
+                            <div className="text-xs text-muted-foreground dark:text-muted-foreground">{item.size}</div>
                             <div className="w-10 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         onContextMenu?.(e, item);
                                     }}
-                                    className="p-1 text-gray-400 hover:text-white rounded"
+                                    className="p-1 text-gray-400 hover:text-gray-700 dark:hover:text-white rounded"
                                 >
                                     <MoreVertical className="w-4 h-4" />
                                 </button>
