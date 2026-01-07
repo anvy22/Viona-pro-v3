@@ -11,7 +11,7 @@ import { SignedIn, UserButton } from "@clerk/nextjs";
 import { NotificationDropdown } from "@/components/NotificationDropdown";
 import { SearchBar } from "@/components/SearchBar";
 import { OrganizationSelector } from "@/app/organization/components/OrganizationSelector";
-import { useOrgStore } from "@/hooks/useOrgStore";
+import { useOrgStore, useCurrentOrgRole } from "@/hooks/useOrgStore";
 import { Card } from "@/components/ui/card";
 import { toast } from "sonner";
 import type { Warehouse } from "../api/warehouses/route";
@@ -31,6 +31,15 @@ export default function WarehousePage() {
   const [error, setError] = useState<string | null>(null);
 
   const { selectedOrgId, orgs, setSelectedOrgId } = useOrgStore();
+  const role = useCurrentOrgRole();
+  const isRoleLoaded = role !== undefined;
+
+  const isEmployee = role === "employee";
+  const isManager = role === "manager";
+  const isAdmin = role === "admin";
+
+  const canViewWarehouses = isRoleLoaded;
+  const canCreateWarehouse = isRoleLoaded && isAdmin;
 
   const selectOrganization = useCallback((orgId: string | null) => {
     setSelectedOrgId(orgId);
@@ -66,7 +75,7 @@ export default function WarehousePage() {
       }
       const data: Warehouse[] = await res.json();
       setWarehouses(Array.isArray(data) ? data : []);
-      
+
       if (showRefreshing) {
         toast.success("Warehouses refreshed successfully");
       }
@@ -198,8 +207,8 @@ export default function WarehousePage() {
         <div className="flex-1 overflow-y-auto">
           <div className="space-y-6 p-4 md:p-8 pt-6">
             {error && (
-              <ErrorAlert 
-                message={error} 
+              <ErrorAlert
+                message={error}
                 onDismiss={() => setError(null)}
               />
             )}
@@ -208,14 +217,13 @@ export default function WarehousePage() {
 
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0 gap-4">
               <div className="flex items-center gap-2">
-                <Button 
-                  onClick={() => setIsDialogOpen(true)} 
-                  disabled={isLoading}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Warehouse
-                </Button>
-                
+                {canCreateWarehouse && (
+                  <Button onClick={() => setIsDialogOpen(true)} disabled={isLoading}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Warehouse
+                  </Button>
+                )}
+
                 <Button
                   variant="outline"
                   onClick={() => fetchWarehouses(true)}
@@ -228,22 +236,30 @@ export default function WarehousePage() {
             </div>
 
             {isLoading ? (
-              <LoadingSpinner message="Loading warehouses..." showCard={false}/>
+              <LoadingSpinner message="Loading warehouses..." showCard={false} />
             ) : warehouses.length === 0 ? (
-              <EmptyState onAddWarehouse={() => setIsDialogOpen(true)} />
+              <EmptyState
+                onAddWarehouse={
+                  canCreateWarehouse ? () => setIsDialogOpen(true) : undefined
+                }
+              />
+
             ) : (
-              <WarehouseGrid 
-                warehouses={warehouses} 
+              <WarehouseGrid
+                warehouses={warehouses}
                 onRefresh={fetchWarehouses}
                 orgId={selectedOrgId}
               />
             )}
 
-            <AddWarehouseDialog
-              open={isDialogOpen}
-              onOpenChange={setIsDialogOpen}
-              onSave={handleAddWarehouse}
-            />
+            {canCreateWarehouse && (
+              <AddWarehouseDialog
+                open={isDialogOpen}
+                onOpenChange={setIsDialogOpen}
+                onSave={handleAddWarehouse}
+              />
+            )}
+
           </div>
         </div>
       </div>

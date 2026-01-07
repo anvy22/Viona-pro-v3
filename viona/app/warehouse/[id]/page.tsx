@@ -154,10 +154,6 @@ export default function WarehouseDetailPage() {
                   <RefreshCcw className="h-4 w-4 mr-2" />
                   Refresh
                 </Button>
-                <Button>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit
-                </Button>
               </div>
             </div>
 

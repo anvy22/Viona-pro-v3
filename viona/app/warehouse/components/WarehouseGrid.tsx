@@ -4,11 +4,11 @@ import { useState } from "react";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Warehouse as WarehouseIcon, 
-  Package, 
-  MapPin, 
-  Edit, 
+import {
+  Warehouse as WarehouseIcon,
+  Package,
+  MapPin,
+  Edit,
   Trash2,
   ChevronRight
 } from "lucide-react";
@@ -16,6 +16,8 @@ import type { Warehouse } from "../../api/warehouses/route";
 import { EditWarehouseDialog } from "./EditWarehouseDialog";
 import { DeleteWarehouseDialog } from "./DeleteWarehouseDialog";
 import { useRouter } from "next/navigation";
+import { useCurrentOrgRole } from "@/hooks/useOrgStore";
+
 
 type Props = {
   warehouses: Warehouse[];
@@ -28,6 +30,16 @@ export function WarehouseGrid({ warehouses, onRefresh, orgId }: Props) {
   const [deletingWarehouse, setDeletingWarehouse] = useState<Warehouse | null>(null);
   const router = useRouter();
 
+  const role = useCurrentOrgRole();
+  const isRoleLoaded = role !== undefined;
+
+  const isAdmin = role === "admin";
+
+  // RBAC
+  const canEditWarehouse = isRoleLoaded && isAdmin;
+  const canDeleteWarehouse = isRoleLoaded && isAdmin;
+
+
   const handleViewDetails = (warehouseId: string) => {
     router.push(`/warehouse/${warehouseId}?orgId=${orgId}`);
   };
@@ -36,8 +48,8 @@ export function WarehouseGrid({ warehouses, onRefresh, orgId }: Props) {
     <>
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {warehouses.map((warehouse) => (
-          <Card 
-            key={warehouse.id} 
+          <Card
+            key={warehouse.id}
             className="hover:shadow-lg transition-shadow cursor-pointer group"
             onClick={() => handleViewDetails(warehouse.id)}
           >
@@ -81,33 +93,41 @@ export function WarehouseGrid({ warehouses, onRefresh, orgId }: Props) {
               </div>
             </CardContent>
 
-            <CardFooter className="pt-4 flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditingWarehouse(warehouse);
-                }}
-                className="flex-1"
-              >
-                <Edit className="h-4 w-4 mr-1" />
-                Edit
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setDeletingWarehouse(warehouse);
-                }}
-                className="flex-1"
-                disabled={warehouse.isDefault}
-              >
-                <Trash2 className="h-4 w-4 mr-1" />
-                Delete
-              </Button>
-            </CardFooter>
+            {(canEditWarehouse || canDeleteWarehouse) && (
+              <CardFooter className="pt-4 flex gap-2">
+                {canEditWarehouse && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditingWarehouse(warehouse);
+                    }}
+                    className="flex-1"
+                  >
+                    <Edit className="h-4 w-4 mr-1" />
+                    Edit
+                  </Button>
+                )}
+
+                {canDeleteWarehouse && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeletingWarehouse(warehouse);
+                    }}
+                    className="flex-1"
+                    disabled={warehouse.isDefault}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete
+                  </Button>
+                )}
+              </CardFooter>
+            )}
+
           </Card>
         ))}
       </div>

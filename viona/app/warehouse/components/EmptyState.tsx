@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Warehouse } from "lucide-react";
 
 type Props = {
-  onAddWarehouse: () => void;
+  onAddWarehouse?: () => void;
 };
 
 export function EmptyState({ onAddWarehouse }: Props) {
