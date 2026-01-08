@@ -1,19 +1,24 @@
-import { Handle, Position } from "reactflow";
-import { Zap } from "lucide-react";
+// workflows/[workflowId]/nodes/TriggerNode.tsx (REPLACE existing)
 
-export default function TriggerNode({ data }: any) {
+import { NodeProps } from "reactflow";
+import BaseNode from "./BaseNode";
+import { WorkflowNodeBase, ManualTriggerData } from "../../types";
+
+export default function TriggerNode({ data, id }: NodeProps<ManualTriggerData>) {
+  // Reconstruct the full node (you'll need to pass this differently, see Step 5)
+  const node: WorkflowNodeBase<ManualTriggerData> = {
+    id,
+    type: "trigger.manual",
+    category: "trigger",
+    position: { x: 0, y: 0 },
+    data,
+  };
+
   return (
-    <div className="rounded-md border bg-background shadow-sm px-4 py-2 min-w-[160px]">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <Zap className="h-4 w-4 text-yellow-500" />
-        {data.label || "Manual Trigger"}
+    <BaseNode node={node}>
+      <div className="text-muted-foreground">
+        {data.label || "Click to start"}
       </div>
-
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        className="w-2 h-2 bg-blue-500"
-      />
-    </div>
+    </BaseNode>
   );
 }

@@ -13,6 +13,8 @@ import { Badge } from "@/components/ui/badge";
 import { SignedIn, UserButton } from "@clerk/nextjs";
 import { toast } from "sonner";
 
+
+
 import { useOrgStore, useCurrentOrgRole } from "@/hooks/useOrgStore";
 import { getWorkflowById, updateWorkflow } from "../action";
 
@@ -25,6 +27,9 @@ import type {
 import Toolbar from "./toolbar";
 import Canvas from "./canvas";
 import Sidebar from "./sidebar";
+import NodeLibrary from "./node-library";
+import { Connection } from "reactflow";
+
 
 export default function WorkflowEditorPage() {
     const params = useParams();
@@ -104,6 +109,78 @@ export default function WorkflowEditorPage() {
                 ...prev,
                 nodes: [...prev.nodes, node],
             };
+        });
+
+        setSelectedNode(node);
+    };
+
+    const handleDeleteNodes = (nodeIds: string[]) => {
+        if (!isAdmin) return;
+
+        const deletedSet = new Set(nodeIds);
+
+        setDefinition(prev => {
+            if (!prev) return prev;
+
+            return {
+                ...prev,
+                nodes: prev.nodes.filter(n => !deletedSet.has(n.id)),
+                // Remove edges connected to deleted nodes
+                edges: prev.edges.filter(
+                    e => !deletedSet.has(e.source) && !deletedSet.has(e.target)
+                ),
+            };
+        });
+
+        // Clear selection if deleted
+        if (selectedNode && deletedSet.has(selectedNode.id)) {
+            setSelectedNode(null);
+        }
+
+        toast.success(`Deleted ${nodeIds.length} node(s)`);
+    };
+
+    const handleDeleteEdges = (edgeIds: string[]) => {
+        if (!isAdmin) return;
+
+        const deletedSet = new Set(edgeIds);
+
+        setDefinition(prev => {
+            if (!prev) return prev;
+
+            return {
+                ...prev,
+                edges: prev.edges.filter(e => !deletedSet.has(e.id)),
+            };
+        });
+    };
+
+    const handleConnect = (connection: Connection) => {
+        if (readOnly) return;
+
+        setDefinition(prev => {
+            if (!prev) return prev;
+
+            return {
+                ...prev,
+                edges: [
+                    ...prev.edges,
+                    {
+                        id: crypto.randomUUID(),
+                        source: connection.source!,
+                        target: connection.target!,
+                    },
+                ],
+            };
+        });
+    };
+
+    const addNodeFromLibrary = (node: WorkflowNode) => {
+        if (readOnly) return;
+
+        setDefinition(prev => {
+            if (!prev) return prev;
+            return { ...prev, nodes: [...prev.nodes, node] };
         });
 
         setSelectedNode(node);
@@ -189,11 +266,20 @@ export default function WorkflowEditorPage() {
                 <Separator />
 
                 <div className="flex flex-1 min-h-0">
+                    <NodeLibrary
+                        readOnly={readOnly}
+                        onAddNode={addNodeFromLibrary}
+                    />
                     <div className="flex-1 relative bg-muted/40">
                         <Canvas
                             definition={definition}
                             readOnly={readOnly}
                             onSelectNode={setSelectedNode}
+                            onAddNode={addNodeFromLibrary}
+                            onUpdateNode={updateNode}
+                            onConnect={handleConnect}
+                            onDeleteNodes={handleDeleteNodes}  
+                            onDeleteEdges={handleDeleteEdges}
                         />
                     </div>
 
@@ -201,6 +287,7 @@ export default function WorkflowEditorPage() {
                         selectedNode={selectedNode}
                         readOnly={readOnly}
                         onUpdateNode={updateNode}
+                        onClose={() => setSelectedNode(null)}
                     />
                 </div>
             </div>

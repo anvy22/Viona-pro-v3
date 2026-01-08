@@ -19,6 +19,29 @@ export type WorkflowNodeCategory =
   | "condition"
   | "ai";
 
+export interface DiscordSendMessageData {
+  webhookUrl: string;
+  message: string;
+}
+
+export interface NotionCreatePageData {
+  databaseId: string;
+  properties: Record<string, any>;
+}
+
+export interface AirtableCreateRecordData {
+  baseId: string;
+  tableId: string;
+  fields: Record<string, any>;
+}
+
+export interface GitHubCreateIssueData {
+  repo: string; // "owner/repo"
+  title: string;
+  body: string;
+}
+
+
 
 export type WorkflowNodeType =
   | "trigger.manual"
@@ -28,10 +51,22 @@ export type WorkflowNodeType =
   | "action.http"
   | "action.delay"
   | "action.update_inventory"
+  | "action.slack.sendMessage"
+  | "action.googleSheets.appendRow"
+  | "action.discord.sendMessage"
+  | "action.notion.createPage"
+  | "action.airtable.createRecord"
+  | "action.github.createIssue"
   | "condition.if"
   | "ai.prompt";
 
 /* ---------- Base Node Interface ---------- */
+
+export interface NodePort {
+  id: string;
+  kind: "source" | "target";
+  label?: string;
+}
 
 export interface WorkflowNodeBase<T = any> {
   id: NodeId;
@@ -53,14 +88,14 @@ export interface ManualTriggerData {
 
 export interface EventTriggerData {
   event:
-    | "order.created"
-    | "order.updated"
-    | "inventory.low"
-    | "inventory.out_of_stock";
+  | "order.created"
+  | "order.updated"
+  | "inventory.low"
+  | "inventory.out_of_stock";
 }
 
 export interface ScheduleTriggerData {
-  cron: string; 
+  cron: string;
 }
 
 /* ---------- Action Node Data ---------- */
@@ -113,8 +148,33 @@ export type WorkflowNode =
   | WorkflowNodeBase<HttpActionData>
   | WorkflowNodeBase<DelayActionData>
   | WorkflowNodeBase<UpdateInventoryActionData>
+  | WorkflowNodeBase<SlackSendMessageData>
+  | WorkflowNodeBase<GoogleSheetsAppendRowData>
+  | WorkflowNodeBase<DiscordSendMessageData>
+  | WorkflowNodeBase<NotionCreatePageData>
+  | WorkflowNodeBase<AirtableCreateRecordData>
+  | WorkflowNodeBase<GitHubCreateIssueData>
   | WorkflowNodeBase<IfConditionData>
   | WorkflowNodeBase<AIPromptNodeData>;
+
+
+export type NodeDataByType = {
+  "trigger.manual": ManualTriggerData;
+  "trigger.event": EventTriggerData;
+  "trigger.schedule": ScheduleTriggerData;
+  "action.notify": NotifyActionData;
+  "action.http": HttpActionData;
+  "action.delay": DelayActionData;
+  "action.update_inventory": UpdateInventoryActionData;
+  "action.slack.sendMessage": SlackSendMessageData;
+  "action.googleSheets.appendRow": GoogleSheetsAppendRowData;
+  "action.discord.sendMessage": DiscordSendMessageData;      
+  "action.notion.createPage": NotionCreatePageData;          
+  "action.airtable.createRecord": AirtableCreateRecordData;  
+  "action.github.createIssue": GitHubCreateIssueData;        
+  "condition.if": IfConditionData;
+  "ai.prompt": AIPromptNodeData;
+};
 
 /* ---------- Edge Definition ---------- */
 
@@ -123,7 +183,7 @@ export interface WorkflowEdge {
   source: NodeId;
   target: NodeId;
 
-  
+
   condition?: string;
 }
 
@@ -175,3 +235,16 @@ export interface WorkflowRun {
   finishedAt?: string;
 }
 
+// Slack
+export interface SlackSendMessageData {
+  channel: string;
+  message: string;
+  username?: string;
+}
+
+// Google Sheets
+export interface GoogleSheetsAppendRowData {
+  spreadsheetId: string;
+  sheetName: string;
+  values: string[]; // Array of cell values
+}
