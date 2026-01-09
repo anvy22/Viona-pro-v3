@@ -15,9 +15,23 @@ import "reactflow/dist/style.css";
 import { WorkflowDefinition, WorkflowNode } from "../types";
 
 import TriggerNode from "./nodes/TriggerNode";
+import EventTriggerNode from "./nodes/EventTriggerNode";
+import ScheduleTriggerNode from "./nodes/ScheduleTriggerNode";
 import SlackNode from "./nodes/SlackNode";
 import GoogleSheetsNode from "./nodes/GoogleSheetsNode";
 import HttpNode from "./nodes/HttpNode";
+import AIPromptNode from "./nodes/AIPromptNode";
+import AIAgentNode from "./nodes/AIAgentNode";
+import AirtableNode from "./nodes/AirtableNode";
+import DiscordNode from "./nodes/DiscordNode";
+import GitHubNode from "./nodes/GitHubNode";
+import NotionNode from "./nodes/NotionNode";
+import ConditionNode from "./nodes/ConditionNode";
+import DelayNode from "./nodes/DelayNode";
+import MemoryNode from "./nodes/MemoryNode";
+import ChatModelNode from "./nodes/ChatModelNode";
+import NotifyNode from "./nodes/NotifyNode";
+import UpdateInventoryNode from "./nodes/UpdateInventoryNode";
 
 import { useTheme } from "next-themes";
 
@@ -25,13 +39,29 @@ import { useTheme } from "next-themes";
 /* ---------------- Node Types ---------------- */
 
 const nodeTypes = {
-    "trigger.manual": TriggerNode,
-    "trigger.event": TriggerNode,  // Reuse or create EventTriggerNode
-    "action.slack.sendMessage": SlackNode,
-    "action.googleSheets.appendRow": GoogleSheetsNode,
-    "action.http": HttpNode,
-    "ai.prompt": HttpNode,
-    // Add others...
+  // Triggers
+  "trigger.manual": TriggerNode,
+  "trigger.event": EventTriggerNode,
+  "trigger.schedule": ScheduleTriggerNode,
+  
+  // Actions
+  "action.slack.sendMessage": SlackNode,
+  "action.googleSheets.appendRow": GoogleSheetsNode,
+  "action.http": HttpNode,
+  "action.discord.sendMessage": DiscordNode,
+  "action.github.createIssue": GitHubNode,
+  "action.notion.createPage": NotionNode,
+  "action.airtable.createRecord": AirtableNode,
+  "action.delay": DelayNode,
+  "action.notify": NotifyNode,
+  "action.update_inventory": UpdateInventoryNode,
+  
+  // AI & Logic
+  "ai.prompt": AIPromptNode,
+  "ai.agent": AIAgentNode,
+  "ai.chat_model": ChatModelNode,
+  "ai.memory": MemoryNode,
+  "condition.if": ConditionNode,
 };
 
 /* ---------------- Props ---------------- */

@@ -1,23 +1,22 @@
-// workflows/[workflowId]/nodes/TriggerNode.tsx (REPLACE existing)
-
+// workflows/[workflowId]/nodes/TriggerNode.tsx
 import { NodeProps } from "reactflow";
 import BaseNode from "./BaseNode";
-import { WorkflowNodeBase, ManualTriggerData } from "../../types";
+import { WorkflowNode } from "../../types";
 
-export default function TriggerNode({ data, id }: NodeProps<ManualTriggerData>) {
-  // Reconstruct the full node (you'll need to pass this differently, see Step 5)
-  const node: WorkflowNodeBase<ManualTriggerData> = {
-    id,
-    type: "trigger.manual",
+export default function TriggerNode(props: NodeProps) {
+  // Use the type provided by React Flow props directly
+  const node: WorkflowNode = {
+    id: props.id,
+    type: props.type as any, 
     category: "trigger",
-    position: { x: 0, y: 0 },
-    data,
+    position: props.dragging ? props.dragHandle ?? { x: 0, y: 0 } : { x: 0, y: 0 },
+    data: props.data,
   };
 
   return (
     <BaseNode node={node}>
-      <div className="text-muted-foreground">
-        {data.label || "Click to start"}
+      <div className="text-muted-foreground text-xs">
+        {props.data.label || "Manual Trigger"}
       </div>
     </BaseNode>
   );

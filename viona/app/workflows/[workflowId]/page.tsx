@@ -137,7 +137,6 @@ export default function WorkflowEditorPage() {
             setSelectedNode(null);
         }
 
-        toast.success(`Deleted ${nodeIds.length} node(s)`);
     };
 
     const handleDeleteEdges = (edgeIds: string[]) => {
