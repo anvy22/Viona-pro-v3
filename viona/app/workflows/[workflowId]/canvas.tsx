@@ -17,19 +17,19 @@ import { WorkflowDefinition, WorkflowNode } from "../types";
 import TriggerNode from "./nodes/TriggerNode";
 import EventTriggerNode from "./nodes/EventTriggerNode";
 import ScheduleTriggerNode from "./nodes/ScheduleTriggerNode";
+import HttpNode from "./nodes/HttpNode";
 import SlackNode from "./nodes/SlackNode";
 import GoogleSheetsNode from "./nodes/GoogleSheetsNode";
-import HttpNode from "./nodes/HttpNode";
 import AIPromptNode from "./nodes/AIPromptNode";
 import AIAgentNode from "./nodes/AIAgentNode";
-import AirtableNode from "./nodes/AirtableNode";
-import DiscordNode from "./nodes/DiscordNode";
-import GitHubNode from "./nodes/GitHubNode";
-import NotionNode from "./nodes/NotionNode";
+import ChatModelNode from "./nodes/ChatModelNode";
+import MemoryNode from "./nodes/MemoryNode";
 import ConditionNode from "./nodes/ConditionNode";
 import DelayNode from "./nodes/DelayNode";
-import MemoryNode from "./nodes/MemoryNode";
-import ChatModelNode from "./nodes/ChatModelNode";
+import DiscordNode from "./nodes/DiscordNode";
+import AirtableNode from "./nodes/AirtableNode";
+import GitHubNode from "./nodes/GitHubNode";
+import NotionNode from "./nodes/NotionNode";
 import NotifyNode from "./nodes/NotifyNode";
 import UpdateInventoryNode from "./nodes/UpdateInventoryNode";
 
@@ -39,28 +39,26 @@ import { useTheme } from "next-themes";
 /* ---------------- Node Types ---------------- */
 
 const nodeTypes = {
-  // Triggers
   "trigger.manual": TriggerNode,
   "trigger.event": EventTriggerNode,
   "trigger.schedule": ScheduleTriggerNode,
-  
-  // Actions
+
+  "action.http": HttpNode,
   "action.slack.sendMessage": SlackNode,
   "action.googleSheets.appendRow": GoogleSheetsNode,
-  "action.http": HttpNode,
   "action.discord.sendMessage": DiscordNode,
+  "action.airtable.createRecord": AirtableNode,
   "action.github.createIssue": GitHubNode,
   "action.notion.createPage": NotionNode,
-  "action.airtable.createRecord": AirtableNode,
-  "action.delay": DelayNode,
   "action.notify": NotifyNode,
+  "action.delay": DelayNode,
   "action.update_inventory": UpdateInventoryNode,
-  
-  // AI & Logic
+
   "ai.prompt": AIPromptNode,
   "ai.agent": AIAgentNode,
   "ai.chat_model": ChatModelNode,
   "ai.memory": MemoryNode,
+
   "condition.if": ConditionNode,
 };
 
@@ -103,7 +101,9 @@ export default function Canvas({
                 id: n.id,
                 type: n.type,
                 position: n.position,
-                data: n.data,
+                data: {
+                    node: n, 
+                },
             })),
         [definition.nodes]
     );

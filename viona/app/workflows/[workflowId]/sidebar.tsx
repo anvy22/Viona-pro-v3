@@ -1,8 +1,6 @@
-// workflows/[workflowId]/sidebar.tsx - UPDATE component
-
 "use client";
 
-import { Info, X } from "lucide-react";
+import { X } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -12,12 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
 import { WorkflowNode } from "../types";
+import { getNodeDefinition } from "../action";
 
 interface SidebarProps {
   selectedNode: WorkflowNode | null;
   readOnly: boolean;
   onUpdateNode: (node: WorkflowNode) => void;
-  onClose: () => void; // NEW: callback to deselect
+  onClose: () => void;
 }
 
 export default function Sidebar({
@@ -26,22 +25,22 @@ export default function Sidebar({
   onUpdateNode,
   onClose,
 }: SidebarProps) {
-  // Don't render at all if no node selected
+  // Nothing selected → nothing rendered
   if (!selectedNode) return null;
+
+  const definition = getNodeDefinition(selectedNode.type);
 
   return (
     <>
-      {/* Backdrop (optional - click to close) */}
+      {/* Mobile backdrop */}
       <div
         className="fixed inset-0 bg-black/20 dark:bg-black/40 z-40 lg:hidden"
         onClick={onClose}
       />
 
       {/* Sidebar */}
-      <aside
-        className="fixed lg:relative right-0 top-0 bottom-0 w-[320px] border-l bg-background flex flex-col z-50 shadow-lg lg:shadow-none animate-in slide-in-from-right duration-200"
-      >
-        {/* Header with close button */}
+      <aside className="fixed lg:relative right-0 top-0 bottom-0 w-[320px] border-l bg-background flex flex-col z-50 shadow-lg lg:shadow-none animate-in slide-in-from-right duration-200">
+        {/* Header */}
         <div className="h-[48px] px-4 flex items-center justify-between border-b">
           <h3 className="text-sm font-semibold">Node Settings</h3>
           <Button
@@ -56,7 +55,7 @@ export default function Sidebar({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Node Meta */}
+          {/* Node meta */}
           <Card className="p-3 space-y-2">
             <div className="flex justify-between items-center">
               <span className="text-xs text-muted-foreground">Type</span>
@@ -71,169 +70,101 @@ export default function Sidebar({
 
           <Separator />
 
-          {/* Dynamic Settings */}
+          {/* Settings */}
           {!readOnly && (
-            <Card className="p-3 space-y-4">
-              {/* Manual Trigger */}
-              {selectedNode.type === "trigger.manual" && (
-                <div className="space-y-2">
-                  <Label className="text-xs">Label</Label>
-                  <Input
-                    value={selectedNode.data.label ?? ""}
-                    onChange={e =>
-                      onUpdateNode({
-                        ...selectedNode,
-                        data: {
-                          ...selectedNode.data,
-                          label: e.target.value,
-                        },
-                      })
+            <>
+              {!definition?.settings || definition.settings.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  This node has no configurable settings.
+                </p>
+              ) : (
+                <Card className="p-3 space-y-4">
+                  {definition.settings.map(field => {
+                    const value = (selectedNode.data as any)[field.name];
+
+                    /* ---------------- TEXT ---------------- */
+                    if (field.kind === "text") {
+                      return (
+                        <div key={field.name} className="space-y-2">
+                          <Label className="text-xs">{field.label}</Label>
+                          <Input
+                            value={value ?? ""}
+                            placeholder={field.placeholder}
+                            onChange={e =>
+                              onUpdateNode({
+                                ...selectedNode,
+                                data: {
+                                  ...selectedNode.data,
+                                  [field.name]: e.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </div>
+                      );
                     }
-                  />
-                </div>
-              )}
 
-              {/* HTTP Action */}
-              {selectedNode.type === "action.http" && (
-                <>
-                  <div className="space-y-2">
-                    <Label className="text-xs">URL</Label>
-                    <Input
-                      placeholder="https://api.example.com"
-                      value={selectedNode.data.url}
-                      onChange={e =>
-                        onUpdateNode({
-                          ...selectedNode,
-                          data: {
-                            ...selectedNode.data,
-                            url: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-xs">Method</Label>
-                    <Input
-                      value={selectedNode.data.method}
-                      onChange={e =>
-                        onUpdateNode({
-                          ...selectedNode,
-                          data: {
-                            ...selectedNode.data,
-                            method: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                </>
-              )}
-
-              {/* AI Prompt */}
-              {selectedNode.type === "ai.prompt" && (
-                <div className="space-y-2">
-                  <Label className="text-xs">Prompt</Label>
-                  <Textarea
-                    rows={6}
-                    value={selectedNode.data.prompt}
-                    onChange={e =>
-                      onUpdateNode({
-                        ...selectedNode,
-                        data: {
-                          ...selectedNode.data,
-                          prompt: e.target.value,
-                        },
-                      })
+                    /* ---------------- TEXTAREA ---------------- */
+                    if (field.kind === "textarea") {
+                      return (
+                        <div key={field.name} className="space-y-2">
+                          <Label className="text-xs">{field.label}</Label>
+                          <Textarea
+                            rows={field.rows ?? 4}
+                            value={value ?? ""}
+                            onChange={e =>
+                              onUpdateNode({
+                                ...selectedNode,
+                                data: {
+                                  ...selectedNode.data,
+                                  [field.name]: e.target.value,
+                                },
+                              })
+                            }
+                          />
+                        </div>
+                      );
                     }
-                  />
-                </div>
+
+                    /* ---------------- SELECT ---------------- */
+                    if (field.kind === "select") {
+                      return (
+                        <div key={field.name} className="space-y-2">
+                          <Label className="text-xs">{field.label}</Label>
+                          <select
+                            className="w-full rounded-md border bg-background px-2 py-1.5 text-sm"
+                            value={value ?? ""}
+                            onChange={e =>
+                              onUpdateNode({
+                                ...selectedNode,
+                                data: {
+                                  ...selectedNode.data,
+                                  [field.name]: e.target.value,
+                                },
+                              })
+                            }
+                          >
+                            {field.options.map(opt => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    }
+
+                    return null;
+                  })}
+                </Card>
               )}
-
-              {/* Slack */}
-              {selectedNode.type === "action.slack.sendMessage" && (
-                <>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Channel</Label>
-                    <Input
-                      placeholder="#general"
-                      value={selectedNode.data.channel}
-                      onChange={e =>
-                        onUpdateNode({
-                          ...selectedNode,
-                          data: {
-                            ...selectedNode.data,
-                            channel: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-xs">Message</Label>
-                    <Textarea
-                      rows={4}
-                      value={selectedNode.data.message}
-                      onChange={e =>
-                        onUpdateNode({
-                          ...selectedNode,
-                          data: {
-                            ...selectedNode.data,
-                            message: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                </>
-              )}
-
-              {/* Google Sheets */}
-              {selectedNode.type === "action.googleSheets.appendRow" && (
-                <>
-                  <div className="space-y-2">
-                    <Label className="text-xs">Spreadsheet ID</Label>
-                    <Input
-                      placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
-                      value={selectedNode.data.spreadsheetId}
-                      onChange={e =>
-                        onUpdateNode({
-                          ...selectedNode,
-                          data: {
-                            ...selectedNode.data,
-                            spreadsheetId: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label className="text-xs">Sheet Name</Label>
-                    <Input
-                      value={selectedNode.data.sheetName}
-                      onChange={e =>
-                        onUpdateNode({
-                          ...selectedNode,
-                          data: {
-                            ...selectedNode.data,
-                            sheetName: e.target.value,
-                          },
-                        })
-                      }
-                    />
-                  </div>
-                </>
-              )}
-            </Card>
+            </>
           )}
 
-          {/* Read only */}
+          {/* Read-only message */}
           {readOnly && (
             <p className="text-xs text-muted-foreground">
-              You have read-only access to this workflow
+              You have read-only access to this workflow.
             </p>
           )}
         </div>

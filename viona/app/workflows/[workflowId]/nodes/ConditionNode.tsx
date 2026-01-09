@@ -1,15 +1,12 @@
 import { NodeProps } from "reactflow";
 import BaseNode from "./BaseNode";
-import { WorkflowNodeBase, IfConditionData } from "../../types";
+import { WorkflowNode } from "../../types";
 
-export default function ConditionNode({ data, id }: NodeProps<IfConditionData>) {
-  const node: WorkflowNodeBase<IfConditionData> = {
-    id,
-    type: "condition.if",
-    category: "condition",
-    position: { x: 0, y: 0 },
-    data,
-  };
+export default function ConditionNode(
+  props: NodeProps<{ node: WorkflowNode }>
+) {
+  const node = props.data.node;
+  const data = node.data as any;
 
   return (
     <BaseNode node={node}>
@@ -17,7 +14,7 @@ export default function ConditionNode({ data, id }: NodeProps<IfConditionData>) 
         <div className="font-mono text-[10px] bg-muted/50 px-2 py-1 rounded truncate">
           {data.expression || "No condition"}
         </div>
-        
+
         <div className="flex justify-between items-center pt-1 border-t">
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full bg-green-500" />
@@ -25,7 +22,7 @@ export default function ConditionNode({ data, id }: NodeProps<IfConditionData>) 
               {data.trueLabel || "True"}
             </span>
           </div>
-          
+
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full bg-red-500" />
             <span className="text-[10px] text-red-600 dark:text-red-400 font-medium">

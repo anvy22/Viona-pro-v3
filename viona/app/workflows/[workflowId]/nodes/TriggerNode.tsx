@@ -9,7 +9,6 @@ export default function TriggerNode(props: NodeProps) {
     id: props.id,
     type: props.type as any, 
     category: "trigger",
-    position: props.dragging ? props.dragHandle ?? { x: 0, y: 0 } : { x: 0, y: 0 },
     data: props.data,
   };
 

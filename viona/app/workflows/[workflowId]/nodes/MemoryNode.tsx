@@ -1,24 +1,25 @@
-// nodes/MemoryNode.tsx
 import { NodeProps } from "reactflow";
 import BaseNode from "./BaseNode";
-import { WorkflowNodeBase, MemoryNodeData } from "../../types";
+import { WorkflowNode } from "../../types";
 
-export default function MemoryNode({ data, id }: NodeProps<MemoryNodeData>) {
-  const node: WorkflowNodeBase<MemoryNodeData> = {
-    id,
-    type: "ai.memory",
-    category: "ai",
-    position: { x: 0, y: 0 },
-    data,
-  };
+export default function MemoryNode(
+  props: NodeProps<{ node: WorkflowNode }>
+) {
+  const node = props.data.node;
+  const data = node.data as any;
 
   const getMemoryIcon = () => {
     switch (data.memoryType) {
-      case "buffer": return "💭";
-      case "buffer-window": return "🪟";
-      case "redis": return "🔴";
-      case "postgres": return "🐘";
-      default: return "📝";
+      case "buffer":
+        return "💭";
+      case "buffer-window":
+        return "🪟";
+      case "redis":
+        return "🔴";
+      case "postgres":
+        return "🐘";
+      default:
+        return "📝";
     }
   };
 
@@ -28,10 +29,10 @@ export default function MemoryNode({ data, id }: NodeProps<MemoryNodeData>) {
         <div className="flex items-center gap-2">
           <span className="text-base">{getMemoryIcon()}</span>
           <span className="font-medium text-xs capitalize">
-            {data.memoryType.replace("-", " ")}
+            {(data.memoryType || "memory").replace("-", " ")}
           </span>
         </div>
-        
+
         <div className="text-[10px] text-muted-foreground">
           Session: {data.sessionKey || "default"}
         </div>

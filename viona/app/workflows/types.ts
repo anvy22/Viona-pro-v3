@@ -58,7 +58,11 @@ export type WorkflowNodeType =
   | "action.airtable.createRecord"
   | "action.github.createIssue"
   | "condition.if"
-  | "ai.prompt";
+  | "ai.prompt"
+  | "ai.prompt"
+  | "ai.memory"
+  | "ai.agent";
+
 
 /* ---------- Base Node Interface ---------- */
 
@@ -122,6 +126,8 @@ export interface UpdateInventoryActionData {
   delta: number;
 }
 
+
+
 /* ---------- Condition Node Data ---------- */
 
 export interface IfConditionData {
@@ -132,30 +138,56 @@ export interface IfConditionData {
 
 /* ---------- AI Node Data ---------- */
 
+export type MemoryType =
+  | "buffer"
+  | "buffer-window"
+  | "redis"
+  | "postgres";
+
+export interface MemoryNodeData {
+  memoryType: MemoryType;
+  sessionKey: string;
+  contextWindowLength?: number;
+}
+
 export interface AIPromptNodeData {
   prompt: string;
   model?: "gpt-4" | "gemini" | "grok";
   temperature?: number;
 }
 
+export type AIProvider =
+  | "openai"
+  | "claude"
+  | "gemini"
+  | "ollama";
+
+export interface AIAgentNodeData {
+  chatModel: AIProvider;
+
+  // Provider-specific models
+  openaiModel?: string;
+  claudeModel?: string;
+  geminiModel?: string;
+  ollamaModel?: string;
+
+  // Memory integration
+  memoryType?: MemoryType;
+  contextWindowLength?: number;
+}
+
 /* ---------- Strongly Typed Node Union ---------- */
 
-export type WorkflowNode =
-  | WorkflowNodeBase<ManualTriggerData>
-  | WorkflowNodeBase<EventTriggerData>
-  | WorkflowNodeBase<ScheduleTriggerData>
-  | WorkflowNodeBase<NotifyActionData>
-  | WorkflowNodeBase<HttpActionData>
-  | WorkflowNodeBase<DelayActionData>
-  | WorkflowNodeBase<UpdateInventoryActionData>
-  | WorkflowNodeBase<SlackSendMessageData>
-  | WorkflowNodeBase<GoogleSheetsAppendRowData>
-  | WorkflowNodeBase<DiscordSendMessageData>
-  | WorkflowNodeBase<NotionCreatePageData>
-  | WorkflowNodeBase<AirtableCreateRecordData>
-  | WorkflowNodeBase<GitHubCreateIssueData>
-  | WorkflowNodeBase<IfConditionData>
-  | WorkflowNodeBase<AIPromptNodeData>;
+export type WorkflowNode<T extends WorkflowNodeType = WorkflowNodeType> = {
+  id: NodeId;
+  type: T;
+  category: WorkflowNodeCategory;
+  position?: {
+    x: number;
+    y: number;
+  };
+  data: NodeDataByType[T];
+};
 
 
 export type NodeDataByType = {
@@ -168,12 +200,15 @@ export type NodeDataByType = {
   "action.update_inventory": UpdateInventoryActionData;
   "action.slack.sendMessage": SlackSendMessageData;
   "action.googleSheets.appendRow": GoogleSheetsAppendRowData;
-  "action.discord.sendMessage": DiscordSendMessageData;      
-  "action.notion.createPage": NotionCreatePageData;          
-  "action.airtable.createRecord": AirtableCreateRecordData;  
-  "action.github.createIssue": GitHubCreateIssueData;        
+  "action.discord.sendMessage": DiscordSendMessageData;
+  "action.notion.createPage": NotionCreatePageData;
+  "action.airtable.createRecord": AirtableCreateRecordData;
+  "action.github.createIssue": GitHubCreateIssueData;
   "condition.if": IfConditionData;
   "ai.prompt": AIPromptNodeData;
+  "ai.memory": MemoryNodeData;
+  "ai.agent": AIAgentNodeData;
+
 };
 
 /* ---------- Edge Definition ---------- */

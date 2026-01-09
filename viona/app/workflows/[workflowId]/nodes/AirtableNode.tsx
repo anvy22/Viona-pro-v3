@@ -1,16 +1,12 @@
-// nodes/AirtableNode.tsx
 import { NodeProps } from "reactflow";
 import BaseNode from "./BaseNode";
-import { WorkflowNodeBase, AirtableCreateRecordData } from "../../types";
+import { WorkflowNode } from "../../types";
 
-export default function AirtableNode({ data, id }: NodeProps<AirtableCreateRecordData>) {
-  const node: WorkflowNodeBase<AirtableCreateRecordData> = {
-    id,
-    type: "action.airtable.createRecord",
-    category: "action",
-    position: { x: 0, y: 0 },
-    data,
-  };
+export default function AirtableNode(
+  props: NodeProps<{ node: WorkflowNode<"action.airtable.createRecord"> }>
+) {
+  const node = props.data.node;
+  const data = node.data;
 
   return (
     <BaseNode node={node}>

@@ -1,16 +1,12 @@
-// nodes/NotifyNode.tsx
 import { NodeProps } from "reactflow";
 import BaseNode from "./BaseNode";
-import { WorkflowNodeBase, NotifyActionData } from "../../types";
+import { WorkflowNode } from "../../types";
 
-export default function NotifyNode({ data, id }: NodeProps<NotifyActionData>) {
-  const node: WorkflowNodeBase<NotifyActionData> = {
-    id,
-    type: "action.notify",
-    category: "action",
-    position: { x: 0, y: 0 },
-    data,
-  };
+export default function NotifyNode(
+  props: NodeProps<{ node: WorkflowNode<"action.notify"> }>
+) {
+  const node = props.data.node;
+  const data = node.data;
 
   return (
     <BaseNode node={node}>
