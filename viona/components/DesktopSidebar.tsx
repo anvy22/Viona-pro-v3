@@ -13,7 +13,8 @@ import {
   LayoutDashboard,
   GitBranch,
   Building2,
-  Warehouse
+  Warehouse,
+  MessageCircle
 } from "lucide-react";
 import { Logo } from "./Logo";
 import Link from "next/link";
@@ -27,13 +28,14 @@ import {
   TooltipTrigger,
 } from "./ui/tooltip";
 
+
 const routes = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/orders", label: "Orders", icon: Logs },
   { href: "/inventory", label: "Inventory", icon: Package },
   { href: "/warehouse", label: "Warehouse", icon: Warehouse },
   { href: "/workflows", label: "Workflows", icon: Layers2Icon },
-  { href: "/automations", label: "Automations", icon: GitBranch },
+  { href: "/chat", label: "Chat", icon: MessageCircle },
   { href: "/integrations", label: "Integrations", icon: Blocks },
   { href: "/credentials", label: "Credentials", icon: ShieldCheckIcon },
   { href: "/billing", label: "Billing", icon: CoinsIcon },
