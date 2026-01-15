@@ -57,7 +57,9 @@ class OrdersAgent(BaseAgent):
             content=f"User query: '{state['input']}'\n\n"
                     f"Order data:\n{json.dumps(tool_results, indent=2)}\n\n"
                     f"Give a helpful, conversational response about their orders. "
-                    f"Highlight important patterns (pending orders, revenue, top customers)."
+                    f"Highlight important patterns (pending orders, revenue, top customers).\n\n"
+                    f"IMPORTANT: Do NOT use markdown tables (| col | col |). Tables are rendered separately by the UI. "
+                    f"Write in natural prose only."
         ))
         
         response, usage = await self.invoke_llm(state, messages)

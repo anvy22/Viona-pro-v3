@@ -63,7 +63,9 @@ class InventoryAgent(BaseAgent):
             content=f"User query: '{state['input']}'\n\n"
                     f"Inventory data:\n{json.dumps(tool_results, indent=2)}\n\n"
                     f"Give a helpful, conversational response. Highlight any issues (low stock, imbalances). "
-                    f"Don't just list data - tell them what they need to know."
+                    f"Don't just list data - tell them what they need to know.\n\n"
+                    f"IMPORTANT: Do NOT use markdown tables (| col | col |). Tables are rendered separately by the UI. "
+                    f"Write in natural prose only."
         ))
         
         response, usage = await self.invoke_llm(state, messages)

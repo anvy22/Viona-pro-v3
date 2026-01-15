@@ -76,13 +76,17 @@ class AnalyticsAgent(BaseAgent):
                         f"Give them actionable, specific recommendations based on this data. "
                         f"Be conversational and warm - like a trusted business advisor. "
                         f"Focus on 3-5 concrete actions they can take. "
-                        f"Don't just list metrics - tell them what the data MEANS for their business."
+                        f"Don't just list metrics - tell them what the data MEANS for their business.\n\n"
+                        f"IMPORTANT: Do NOT use markdown tables (| col | col |). Tables are rendered separately by the UI. "
+                        f"Write in natural prose only."
             ))
         else:
             messages.append(HumanMessage(
                 content=f"User query: '{state['input']}'\n\n"
                         f"Data:\n{json.dumps(tool_results, indent=2)}\n\n"
-                        f"Provide a clear, helpful response. Lead with the key insight, then supporting details."
+                        f"Provide a clear, helpful response. Lead with the key insight, then supporting details.\n\n"
+                        f"IMPORTANT: Do NOT use markdown tables (| col | col |). Tables are rendered separately by the UI. "
+                        f"Write in natural prose only."
             ))
         
         # Generate response with LLM
