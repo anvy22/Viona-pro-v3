@@ -1,20 +1,26 @@
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
-    container_name: zookeeper
     environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
+       ZOOKEEPER_CLIENT_PORT: 2181
+       ZOOKEEPER_TICK_TIME: 2000
     ports:
-      - "2181:2181"
+       - "2181:2181"
+    healthcheck:
+       test: ["CMD-SHELL", "cub zk-ready localhost:2181 30"]
+       interval: 10s
+       timeout: 10s
+       retries: 5
+       start_period: 40s
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
-    container_name: kafka
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     ports:
-      - "9092:9092"      # internal listener
-      - "29092:29092"    # external listener
+      - "9092:9092"      
+      - "29092:29092"    
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
@@ -23,6 +29,13 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    healthcheck:
+      test: ["CMD-SHELL", "cub kafka-ready -b localhost:9092 1 30"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
 
   redis:
     image: redis:7.0.11
@@ -50,8 +63,10 @@ services:
       KAFKA_BROKER: kafka:9092
       KAFKA_NOTIFICATION_TOPIC: send_notification
     depends_on:
-      - kafka
-      - mongodb
+      kafka:
+        condition: service_healthy
+      mongodb:
+        condition: service_started
     ports:
       - "5001:5001"
 
@@ -78,9 +93,37 @@ services:
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
     depends_on:
-      - kafka
-      - notification-server
-      - redis
+      kafka:
+        condition: service_healthy
+      notification-server:
+        condition: service_started
+      redis:
+        condition: service_started
+
+  ai-agent-server:
+    build: ./ai-agent-server
+    container_name: ai-agent-server
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./ai-agent-server/.env
+    environment:
+      # Clerk Auth - Use your Clerk instance JWKS URL
+      CLERK_JWKS_URL: https://climbing-raven-91.clerk.accounts.dev/.well-known/jwks.json
+      # Infrastructure Overrides (Docker Network)
+      REDIS_URL: redis://redis:6379
+      MONGO_URL: mongodb://root:password@mongodb:27017
+      KAFKA_BROKER: kafka:9092
+      # Shared Secrets
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      mongodb:
+        condition: service_started
 
 volumes:
   mongodb_data:

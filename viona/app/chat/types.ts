@@ -16,8 +16,18 @@ export interface ChatSummary {
   createdAt: string;
 }
 
+// Agent output structure from backend
+export interface AgentOutput {
+  type: "text" | "chart" | "table" | "action";
+  payload: Record<string, unknown>;
+  summary: string;
+  confidence: number;
+  suggestions?: string[];
+}
+
 export type ChatMessage = {
   id: string;
   role: ChatRole;
   content: string;
+  agentOutput?: AgentOutput; // Full structured output from agent
 };
