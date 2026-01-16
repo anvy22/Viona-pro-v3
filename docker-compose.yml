@@ -53,6 +53,12 @@ services:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   notification-server:
     build: ./notification-server
@@ -66,7 +72,7 @@ services:
       kafka:
         condition: service_healthy
       mongodb:
-        condition: service_started
+        condition: service_healthy
     ports:
       - "5001:5001"
 
@@ -123,7 +129,7 @@ services:
       redis:
         condition: service_started
       mongodb:
-        condition: service_started
+        condition: service_healthy
 
 volumes:
   mongodb_data:

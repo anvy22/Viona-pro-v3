@@ -33,11 +33,6 @@ const createProducer = () => {
     console.warn("Kafka producer disconnected");
   });
 
-  p.on(p.events.CRASH, (e) => {
-    isConnected = false;
-    console.error("Kafka producer crashed:", e);
-  });
-
   return p;
 };
 
@@ -49,7 +44,7 @@ const tryGetKafkaProducer = async (): Promise<Producer | null> => {
   isConnecting = true;
 
   try {
-    producer?.disconnect().catch(() => {});
+    producer?.disconnect().catch(() => { });
     producer = createProducer();
     await producer.connect();
     isConnected = true;

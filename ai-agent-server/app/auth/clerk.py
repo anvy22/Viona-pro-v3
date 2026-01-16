@@ -181,3 +181,73 @@ async def authenticate_websocket(websocket: WebSocket) -> AuthContext:
         role=role,
         email=email
     )
+
+
+async def get_current_user(
+    authorization: str = None,
+    x_org_id: str = None,
+) -> AuthContext:
+    """
+    FastAPI dependency for HTTP request authentication.
+    
+    Expects:
+    - Authorization: Bearer <token>
+    - X-Org-Id: <org_id>
+    """
+    from fastapi import Header
+    # This is a placeholder - will be called with actual header values
+    pass
+
+
+# Create actual dependency with proper header injection
+from fastapi import Header, Depends
+
+async def _get_current_user(
+    authorization: str = Header(..., alias="Authorization"),
+    x_org_id: str = Header(..., alias="X-Org-Id"),
+) -> AuthContext:
+    """
+    FastAPI dependency for HTTP request authentication.
+    
+    Expects:
+    - Authorization: Bearer <token>
+    - X-Org-Id: <org_id>
+    """
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid Authorization header"
+        )
+    
+    token = authorization.replace("Bearer ", "")
+    
+    if not x_org_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing X-Org-Id header"
+        )
+    
+    # Validate JWT
+    claims = await validate_clerk_token(token)
+    user_id = claims.get("sub")
+    email = claims.get("email")
+    
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token claims"
+        )
+    
+    # Resolve organization membership
+    verified_org_id, role = await resolve_org_membership(user_id, x_org_id)
+    
+    return AuthContext(
+        user_id=user_id,
+        org_id=verified_org_id,
+        role=role,
+        email=email
+    )
+
+
+# Export the dependency
+get_current_user = _get_current_user

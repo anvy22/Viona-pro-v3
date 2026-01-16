@@ -75,10 +75,10 @@ async def websocket_chat(websocket: WebSocket):
     """
     WebSocket endpoint for AI chat.
     
-    Connection: ws://host/ws/chat?token=xxx&org_id=123
+    Connection: ws://host/ws/chat?token=xxx&org_id=123&session_id=optional
     
     Client -> Server messages:
-    - {"type": "message", "content": "Hello"}
+    - {"type": "message", "content": "Hello", "session_id": "optional"}
     - {"type": "cancel"}
     
     Server -> Client messages:
@@ -89,12 +89,29 @@ async def websocket_chat(websocket: WebSocket):
     - {"type": "error", "message": "error text"}
     """
     connection_id = str(uuid.uuid4())
-    session_id = str(uuid.uuid4())
+    session_id: Optional[str] = None
     auth: Optional[AuthContext] = None
     
     try:
         # Authenticate
         auth = await authenticate_websocket(websocket)
+        
+        # Get session_id from query params if provided
+        session_id = websocket.query_params.get("session_id")
+        
+        # Create or validate session
+        from app.memory import ChatSessionStore
+        session_store = ChatSessionStore(org_id=auth.org_id, user_id=auth.user_id)
+        
+        if session_id:
+            # Validate existing session
+            existing = await session_store.get_session(session_id)
+            if not existing:
+                # Invalid session_id, create new one
+                session_id = await session_store.create_session()
+        else:
+            # Create new session
+            session_id = await session_store.create_session()
         
         # Register connection
         await manager.connect(connection_id, websocket)
@@ -107,12 +124,25 @@ async def websocket_chat(websocket: WebSocket):
             "user_id": auth.user_id,
         })
         
-        logger.info(f"WebSocket connected: {connection_id}, user={auth.user_id}")
+        logger.info(f"WebSocket connected: {connection_id}, user={auth.user_id}, session={session_id}")
         
         # Message loop
         while True:
             data = await websocket.receive_json()
             msg_type = data.get("type")
+            
+            # Allow client to switch session mid-connection
+            incoming_session_id = data.get("session_id")
+            if incoming_session_id and incoming_session_id != session_id:
+                # Validate and switch
+                existing = await session_store.get_session(incoming_session_id)
+                if existing:
+                    session_id = incoming_session_id
+            
+            # Handle ping for keepalive
+            if msg_type == "ping":
+                await manager.send_json(connection_id, {"type": "pong"})
+                continue
             
             if msg_type == MessageType.CANCEL:
                 manager.cancel(connection_id)
@@ -164,10 +194,24 @@ async def process_message(
     """Process a chat message through the agent pipeline."""
     message_id = str(uuid.uuid4())
     
+    # Initialize session store for persistence
+    from app.memory import ChatSessionStore
+    session_store = ChatSessionStore(org_id=auth.org_id, user_id=auth.user_id)
+    
     try:
         # Check for cancellation
         if manager.is_cancelled(connection_id):
             return
+        
+        # Store user message in MongoDB
+        await session_store.add_message(session_id, "user", content)
+        
+        # Auto-generate title from first message
+        session = await session_store.get_session(session_id)
+        if session and len(session.get("messages", [])) == 1:
+            # First message - generate title
+            title = content[:50] + ("..." if len(content) > 50 else "")
+            await session_store.update_title(session_id, title)
         
         # Create execution context
         context = ExecutionContext(
@@ -201,14 +245,26 @@ async def process_message(
             })
             return
         
+        # Get output
+        output = result.get("output", {})
+        
+        # Store assistant message in MongoDB
+        await session_store.add_message(
+            session_id, 
+            "assistant", 
+            output.get("summary", ""),
+            agent_output=output
+        )
+        
         # Send complete response
         await manager.send_json(connection_id, {
             "type": MessageType.COMPLETE,
             "message_id": message_id,
-            "output": result.get("output", {})
+            "session_id": session_id,  # Include session_id for frontend sync
+            "output": output
         })
         
-        logger.info(f"Message processed: {message_id}")
+        logger.info(f"Message processed: {message_id}, session={session_id}")
     
     except Exception as e:
         logger.exception(f"Error processing message: {message_id}")
