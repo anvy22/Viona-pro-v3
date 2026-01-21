@@ -24,12 +24,13 @@ class CreateOrderTool(ActionTool):
     action_type = "create"
     required_roles = ["admin", "manager"]
     
-    required_fields = ["customer_email", "items"]
+    required_fields = ["customer_email", "items", "payment_method"]
     field_descriptions = {
         "customer_email": "customer's email address",
-        "customer_name": "customer's name",
-        "items": "list of items (SKU and quantity)",
-        "shipping_address": "shipping address details"
+        "customer_name": "customer's full name",
+        "items": "products and quantities (e.g., 'iPhone 17 Pro Max x2, Samsung Galaxy x1')",
+        "payment_method": "payment method (cash, card, bank_transfer, upi, etc.)",
+        "shipping_address": "shipping address (street, city, state, zip code)"
     }
     
     async def preview(
@@ -43,6 +44,8 @@ class CreateOrderTool(ActionTool):
         shipping_state: Optional[str] = None,
         shipping_zip: Optional[str] = None,
         shipping_country: Optional[str] = "USA",
+        payment_method: Optional[str] = None,
+        payment_reference: Optional[str] = None,
         notes: Optional[str] = None,
         **kwargs
     ) -> ActionResult:
@@ -127,6 +130,10 @@ class CreateOrderTool(ActionTool):
                 "zip": shipping_zip,
                 "country": shipping_country
             },
+            "payment": {
+                "method": payment_method,
+                "reference": payment_reference
+            },
             "notes": notes
         }
         
@@ -138,11 +145,12 @@ class CreateOrderTool(ActionTool):
         
         confirmation_msg = f"""I'm ready to create this order:
 
-**Customer:** {customer_email}
+**Customer:** {customer_email}{f' ({customer_name})' if customer_name else ''}
 **Items:**
 {item_lines}
 
 **Total:** ${float(total_amount):,.2f}
+{f'**Payment:** {payment_method}' + (f' (Ref: {payment_reference})' if payment_reference else '') if payment_method else ''}
 
 Do you want me to proceed with this order?"""
         
@@ -164,6 +172,8 @@ Do you want me to proceed with this order?"""
         shipping_state: Optional[str] = None,
         shipping_zip: Optional[str] = None,
         shipping_country: Optional[str] = "USA",
+        payment_method: Optional[str] = None,
+        payment_reference: Optional[str] = None,
         notes: Optional[str] = None,
         **kwargs
     ) -> ActionResult:
@@ -204,12 +214,17 @@ Do you want me to proceed with this order?"""
                 org_id, customer_name, customer_email, customer_phone,
                 shipping_street, shipping_city, shipping_state, 
                 shipping_zip, shipping_country,
-                total_amount, status, notes, order_date, placed_by
+                total_amount, status, payment_method, notes, order_date, placed_by
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
             )
             RETURNING order_id
         '''
+        
+        # Add payment reference to notes if provided
+        order_notes = notes or ""
+        if payment_reference:
+            order_notes = f"Payment ref: {payment_reference}" + (f"\n{notes}" if notes else "")
         
         try:
             result = await self.execute_write(
@@ -225,9 +240,10 @@ Do you want me to proceed with this order?"""
                 shipping_country,
                 float(total_amount),
                 "pending",
-                notes,
+                payment_method,
+                order_notes,
                 datetime.utcnow(),
-                self.auth.user_id
+                self.auth.db_user_id
             )
             
             order_id = result["order_id"]

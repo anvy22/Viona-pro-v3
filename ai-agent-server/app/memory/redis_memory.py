@@ -149,9 +149,56 @@ class RedisMemoryStore:
     async def clear(self) -> None:
         """Clear all memory for this session."""
         redis_client = await get_redis_client()
-        await redis_client.delete(self.messages_key, self.summary_key)
+        await redis_client.delete(self.messages_key, self.summary_key, self.pending_action_key)
     
     async def get_message_count(self) -> int:
         """Get total message count."""
         redis_client = await get_redis_client()
         return await redis_client.llen(self.messages_key)
+    
+    # === Pending Action Storage ===
+    
+    @property
+    def pending_action_key(self) -> str:
+        return f"{self._prefix}:pending_action"
+    
+    async def set_pending_action(self, action_type: str, params: dict, preview_data: dict = None) -> None:
+        """
+        Store pending action awaiting user confirmation.
+        
+        Args:
+            action_type: The action tool name (e.g., 'create_order')
+            params: The extracted parameters for the action
+            preview_data: Optional preview data from the action tool
+        """
+        redis_client = await get_redis_client()
+        
+        action_data = json.dumps({
+            "action_type": action_type,
+            "params": params,
+            "preview_data": preview_data,
+            "created_at": datetime.utcnow().isoformat()
+        })
+        
+        # Store with 10 minute expiry (user should confirm within this time)
+        await redis_client.set(self.pending_action_key, action_data, ex=600)
+    
+    async def get_pending_action(self) -> Optional[dict]:
+        """
+        Get pending action if exists.
+        
+        Returns:
+            Dict with action_type, params, preview_data, or None if no pending action
+        """
+        redis_client = await get_redis_client()
+        action_json = await redis_client.get(self.pending_action_key)
+        
+        if action_json:
+            return json.loads(action_json)
+        return None
+    
+    async def clear_pending_action(self) -> None:
+        """Clear pending action after execution or cancellation."""
+        redis_client = await get_redis_client()
+        await redis_client.delete(self.pending_action_key)
+

@@ -23,6 +23,42 @@ logger = logging.getLogger(__name__)
 
 async def classify_node(state: AgentState) -> AgentState:
     """Classify user intent."""
+    from app.memory.redis_memory import RedisMemoryStore
+    
+    context = state["context"]
+    user_input = state["input"].lower().strip()
+    
+    # === CHECK FOR PENDING ACTION CONFIRMATION FIRST ===
+    # If user has a pending action and says yes/no, route to the correct agent
+    confirmation_words = ['yes', 'yeah', 'yep', 'sure', 'confirm', 'ok', 'okay', 
+                         'proceed', 'do it', 'go ahead', 'no', 'nope', 'cancel', 
+                         'stop', 'never mind', 'nevermind']
+    
+    if user_input in confirmation_words:
+        memory = RedisMemoryStore(
+            org_id=context.auth.org_id,
+            user_id=context.auth.user_id,
+            session_id=context.session_id
+        )
+        pending_action = await memory.get_pending_action()
+        
+        if pending_action:
+            action_type = pending_action.get("action_type", "")
+            # Route to the appropriate agent based on action type
+            if action_type in ["create_order", "update_order_status"]:
+                state["intent"] = "orders"
+                state["agent"] = "orders_agent"
+            elif action_type in ["create_reorder_request", "update_stock", "transfer_stock"]:
+                state["intent"] = "inventory"
+                state["agent"] = "inventory_agent"
+            else:
+                state["intent"] = "orders"  # Default to orders for unknown actions
+                state["agent"] = "orders_agent"
+            
+            logger.info(f"Pending action confirmation detected, routing to {state['agent']}")
+            return state
+    
+    # === NORMAL INTENT CLASSIFICATION ===
     try:
         classification = await classify_intent(state["input"])
         state["intent"] = classification.intent

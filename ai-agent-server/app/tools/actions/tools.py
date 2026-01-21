@@ -201,8 +201,8 @@ class CreateReorderRequestTool(ActionTool):
                 quantity,
                 priority,
                 notes,
-                self.auth.user_id,
-                datetime.now(timezone.utc)
+                self.auth.db_user_id,
+                datetime.utcnow()
             )
             
             request_id = result["reorder_request_id"] if result else None
@@ -831,8 +831,8 @@ class CreateOrderTool(ActionTool):
                    VALUES ($1, $2, $3, 'pending', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
                    RETURNING order_id''',
                 int(self.org_id),
-                self.auth.user_id,
-                datetime.now(timezone.utc),
+                self.auth.db_user_id,
+                datetime.utcnow(),
                 total_amount,
                 customer_name,
                 customer_email,
@@ -843,7 +843,7 @@ class CreateOrderTool(ActionTool):
                 shipping_parts.get("zip"),
                 notes,
                 payment_method,
-                datetime.now(timezone.utc)
+                datetime.utcnow()
             )
             
             order_id = order_result["order_id"] if order_result else None

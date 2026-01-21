@@ -14,6 +14,7 @@ from app.agents.base import (
     TableData, ChartBlock, AnalyticsSection
 )
 from app.agents.prompts import ORDERS_AGENT_PROMPT
+from app.agents.action_handler import extract_action_params
 from app.tools.orders import get_orders_tools
 from app.tools.alerts import get_alerts_tools
 from app.tools.actions import get_action_tools
@@ -33,6 +34,7 @@ class OrdersAgent(BaseAgent):
         """Execute orders query."""
         context = state["context"]
         auth = context.auth
+        user_input = state["input"].lower().strip()
         
         memory = RedisMemoryStore(
             org_id=auth.org_id,
@@ -40,6 +42,65 @@ class OrdersAgent(BaseAgent):
             session_id=context.session_id
         )
         memory_messages = await memory.get_context_messages()
+        
+        # ===== CHECK FOR PENDING ACTION FIRST =====
+        pending_action = await memory.get_pending_action()
+        
+        if pending_action:
+            # Check if user is confirming or cancelling
+            is_confirm = user_input in ['yes', 'yeah', 'yep', 'sure', 'confirm', 'ok', 'okay', 'proceed', 'do it', 'go ahead']
+            is_cancel = user_input in ['no', 'nope', 'cancel', 'stop', 'never mind', 'nevermind']
+            
+            if is_confirm:
+                # Execute the confirmed action
+                tools = get_action_tools(auth)
+                action_type = pending_action["action_type"]
+                params = pending_action["params"]
+                
+                # Find the tool
+                tool = next((t for t in tools if t.name == action_type), None)
+                if tool:
+                    result = await tool.confirm(**params)
+                    await memory.clear_pending_action()
+                    
+                    if result.success:
+                        analytics = AnalyticsSection(
+                            overview=f"✅ **Action Completed**\n\n{result.result_message}",
+                            key_metrics=[],
+                            observations=[],
+                            follow_ups=["You can ask me about your orders anytime."]
+                        )
+                    else:
+                        analytics = AnalyticsSection(
+                            overview=f"❌ **Action Failed**\n\n{result.error or 'Unknown error'}",
+                            key_metrics=[],
+                            observations=[],
+                            follow_ups=[]
+                        )
+                    
+                    output = AgentOutput.analytics_response(analytics, confidence=0.95)
+                    state["output"] = output.model_dump()
+                    await memory.add_message("user", state["input"])
+                    await memory.add_message("assistant", output.summary)
+                    return state
+            
+            elif is_cancel:
+                # Cancel the pending action
+                await memory.clear_pending_action()
+                
+                analytics = AnalyticsSection(
+                    overview="🚫 **Action Cancelled**\n\nNo problem, I've cancelled that action.",
+                    key_metrics=[],
+                    observations=[],
+                    follow_ups=["Let me know if you need anything else."]
+                )
+                output = AgentOutput.analytics_response(analytics, confidence=0.95)
+                state["output"] = output.model_dump()
+                await memory.add_message("user", state["input"])
+                await memory.add_message("assistant", output.summary)
+                return state
+        
+        # ===== NORMAL TOOL EXECUTION =====
         
         # Get tools (orders + alerts + actions)
         tools = get_orders_tools(auth) + get_alerts_tools(auth) + get_action_tools(auth)
@@ -69,10 +130,20 @@ class OrdersAgent(BaseAgent):
                     await memory.add_message("assistant", output.summary)
                     return state
                 
-                # Pending confirmation - show preview and ask for confirmation
+                # Pending confirmation - show preview and store pending action
                 elif action_status == "pending_confirmation":
                     confirm_msg = result.get("confirmation_message", "Do you want to proceed?")
                     preview = result.get("preview", {})
+                    
+                    # Get the params that were used for this action
+                    extracted_params = extract_action_params(state["input"], tool_name)
+                    
+                    # Store pending action in Redis for confirmation
+                    await memory.set_pending_action(
+                        action_type=tool_name,
+                        params=extracted_params,
+                        preview_data=preview
+                    )
                     
                     analytics = AnalyticsSection(
                         overview=f"⚡ **Action Preview**\n\n{confirm_msg}\n\n*Reply with 'yes' to confirm or 'no' to cancel.*",
@@ -82,10 +153,6 @@ class OrdersAgent(BaseAgent):
                     )
                     output = AgentOutput.analytics_response(analytics, confidence=0.95)
                     state["output"] = output.model_dump()
-                    state["pending_action"] = {
-                        "tool": tool_name,
-                        "preview": preview
-                    }
                     await memory.add_message("user", state["input"])
                     await memory.add_message("assistant", output.summary)
                     return state
@@ -158,12 +225,38 @@ class OrdersAgent(BaseAgent):
         }
         
         tools_to_run = set()
-        for keyword, tool_names in tool_mapping.items():
+        
+        # Check for action keywords FIRST - these should run exclusively
+        action_keywords = {
+            "create order": "create_order",
+            "add order": "create_order", 
+            "new order": "create_order",
+            "place order": "create_order",
+            "update status": "update_order_status",
+            "change status": "update_order_status",
+            "mark as": "update_order_status",
+        }
+        
+        for keyword, tool_name in action_keywords.items():
             if keyword in user_input:
-                tools_to_run.update(tool_names)
+                tools_to_run.add(tool_name)
+        
+        # If action tool detected, skip analytics tools - run ONLY the action
+        if tools_to_run:
+            pass  # Don't add analytics tools
+        else:
+            # No action detected - run analytics tools based on keywords
+            for keyword, tool_names in tool_mapping.items():
+                if keyword in user_input:
+                    tools_to_run.update(tool_names)
         
         if not tools_to_run:
             tools_to_run = {"get_order_list", "get_order_status_breakdown"}
+        
+        # Debug: log available tools and which we're looking for
+        tool_names = [t.name for t in tools]
+        logger.info(f"Tools to run: {tools_to_run}")
+        logger.info(f"Available tools: {tool_names}")
         
         for tool in tools:
             if tool.name in tools_to_run:

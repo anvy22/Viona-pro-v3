@@ -142,57 +142,138 @@ def detect_action_intent(user_message: str, pending_action: Optional[str] = None
 
 
 def extract_action_params(message: str, action_type: str) -> dict:
-    """Extract parameters from message for a specific action type."""
+    """
+    Extract parameters from message for a specific action type.
+    
+    IMPORTANT: Only extract parameters that the specific action_type accepts!
+    Different tools have different signatures.
+    """
     params = {}
+    message_lower = message.lower()
     
-    # Extract email
-    email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', message)
-    if email_match:
-        params['customer_email'] = email_match.group()
+    # Define which params each action type accepts
+    ALLOWED_PARAMS = {
+        "create_order": ["customer_name", "customer_email", "items", "customer_phone", 
+                        "shipping_address", "notes", "payment_method"],
+        "update_order_status": ["order_id", "new_status", "notes"],
+        "create_reorder_request": ["product_name", "warehouse_name", "quantity", "priority", "notes"],
+        "generate_report": ["report_type", "period", "format"],
+    }
     
-    # Extract order ID
-    order_id_match = re.search(r'(?:order\s*#?\s*|#)(\d+)', message, re.IGNORECASE)
-    if order_id_match:
-        params['order_id'] = int(order_id_match.group(1))
+    allowed = ALLOWED_PARAMS.get(action_type, [])
     
-    # Extract SKU
-    sku_match = re.search(r'(?:sku[:\s]*|sku-)([a-zA-Z0-9-]+)', message, re.IGNORECASE)
-    if sku_match:
-        params['sku'] = sku_match.group(1).upper()
+    # === Extract email ===
+    if "customer_email" in allowed:
+        email_match = re.search(r'[\w\.-]+@[\w\.-]+\.\w+', message)
+        if email_match:
+            params['customer_email'] = email_match.group()
     
-    # Extract quantity
-    qty_match = re.search(r'(\d+)\s*(?:units?|items?|pcs?)', message, re.IGNORECASE)
-    if qty_match:
-        params['quantity'] = int(qty_match.group(1))
+    # === Extract customer name ===
+    if "customer_name" in allowed:
+        name_patterns = [
+            r'(?:for|customer)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+?)(?:\s+with|\s+email|\s+at\s+|\s*,|\s*$)',
+            r'(?:customer[:\s]+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)',
+            r'(?:name[:\s]+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)',
+        ]
+        for pattern in name_patterns:
+            name_match = re.search(pattern, message)
+            if name_match:
+                params['customer_name'] = name_match.group(1).strip()
+                break
     
-    # Extract status for order updates
-    for status in ['pending', 'processing', 'shipped', 'delivered', 'cancelled']:
-        if status in message.lower():
-            params['new_status'] = status
-            break
+    # === Extract order ID ===
+    if "order_id" in allowed:
+        order_id_match = re.search(r'(?:order\s*#?\s*|#)(\d+)', message, re.IGNORECASE)
+        if order_id_match:
+            params['order_id'] = int(order_id_match.group(1))
     
-    # Extract warehouse IDs
-    wh_match = re.search(r'warehouse\s*#?\s*(\d+)', message, re.IGNORECASE)
-    if wh_match:
-        params['warehouse_id'] = int(wh_match.group(1))
+    # === Extract items for create_order ===
+    if "items" in allowed:
+        items = []
+        # Try "X unit(s) of [product]"
+        simple_match = re.search(
+            r'(\d+)\s*(?:units?|pcs?|items?)\s+(?:of\s+)?([^,\.\n]+?)(?:\s*,|\s*$|\s+shipping|\s+payment)',
+            message, re.IGNORECASE
+        )
+        if simple_match:
+            qty = int(simple_match.group(1))
+            product = simple_match.group(2).strip()
+            # Clean up the product name - remove quotes and "sku" prefix
+            product = re.sub(r'^sku\s*[:\s]*', '', product, flags=re.IGNORECASE)
+            product = product.strip('"\'')
+            items.append({"product_name": product, "quantity": qty})
+        
+        if items:
+            params['items'] = items
     
-    from_wh = re.search(r'from\s+warehouse\s*#?\s*(\d+)', message, re.IGNORECASE)
-    to_wh = re.search(r'to\s+warehouse\s*#?\s*(\d+)', message, re.IGNORECASE)
-    if from_wh:
-        params['from_warehouse_id'] = int(from_wh.group(1))
-    if to_wh:
-        params['to_warehouse_id'] = int(to_wh.group(1))
+    # === Extract order status ===
+    if "new_status" in allowed:
+        for status in ['pending', 'processing', 'shipped', 'delivered', 'cancelled']:
+            if status in message_lower:
+                params['new_status'] = status
+                break
     
-    # Extract product name (quoted text)
-    name_match = re.search(r'"([^"]+)"|\'([^\']+)\'', message)
-    if name_match:
-        params['name'] = name_match.group(1) or name_match.group(2)
+    # === Extract shipping address (combined string) ===
+    if "shipping_address" in allowed:
+        shipping_match = re.search(
+            r'shipping\s+to\s+([^,]+),\s*([^,]+),\s*([A-Z]{2})\s+(\d{5}(?:-\d{4})?),?\s*([A-Za-z]+)?',
+            message, re.IGNORECASE
+        )
+        if shipping_match:
+            street = shipping_match.group(1).strip()
+            city = shipping_match.group(2).strip()
+            state = shipping_match.group(3).upper()
+            zip_code = shipping_match.group(4)
+            country = shipping_match.group(5).strip() if shipping_match.group(5) else None
+            
+            combined = f"{street}, {city}, {state} {zip_code}"
+            if country:
+                combined += f", {country}"
+            params['shipping_address'] = combined
     
-    # Extract price
-    price_match = re.search(r'\$?([\d,]+(?:\.\d{2})?)', message)
-    if price_match:
-        price_str = price_match.group(1).replace(',', '')
-        params['actual_price'] = float(price_str)
+    # === Extract payment method ===
+    if "payment_method" in allowed:
+        payment_match = re.search(
+            r'payment\s*(?:method)?[:\s]+([a-zA-Z_]+(?:\s+transfer)?)',
+            message, re.IGNORECASE
+        )
+        if payment_match:
+            method = payment_match.group(1).strip().lower()
+            method_map = {
+                'upi': 'upi', 'card': 'card', 'cash': 'cash', 'cod': 'cash',
+                'bank': 'bank_transfer', 'bank transfer': 'bank_transfer',
+            }
+            params['payment_method'] = method_map.get(method, method)
+    
+    # === Extract quantity (for reorder requests) ===
+    if "quantity" in allowed:
+        qty_match = re.search(r'(\d+)\s*(?:units?|items?|pcs?)', message, re.IGNORECASE)
+        if qty_match:
+            params['quantity'] = int(qty_match.group(1))
+    
+    # === Extract warehouse/product names (for reorder requests) ===
+    if "warehouse_name" in allowed:
+        wh_match = re.search(r'(?:to|at|in)\s+warehouse\s+["\']?([^"\']+)["\']?', message, re.IGNORECASE)
+        if wh_match:
+            params['warehouse_name'] = wh_match.group(1).strip()
+    
+    if "product_name" in allowed:
+        prod_match = re.search(r'(?:for|of)\s+["\']?([^"\']+)["\']?\s+(?:to|at)', message, re.IGNORECASE)
+        if prod_match:
+            params['product_name'] = prod_match.group(1).strip()
+    
+    # === Extract report params ===
+    if "report_type" in allowed:
+        for rt in ['sales', 'inventory', 'orders']:
+            if rt in message_lower:
+                params['report_type'] = rt
+                break
+    
+    if "period" in allowed:
+        for p in ['day', 'week', 'month', 'quarter']:
+            if p in message_lower:
+                params['period'] = p
+                break
     
     return params
 

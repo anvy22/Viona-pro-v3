@@ -33,7 +33,8 @@ def get_jwks_client() -> PyJWKClient:
 @dataclass
 class AuthContext:
     """Authenticated user context."""
-    user_id: str          # Clerk user ID
+    user_id: str          # Clerk user ID (string like 'user_31C6...')
+    db_user_id: int       # Database user_id (numeric BigInt)
     org_id: str           # Organization ID (resolved server-side)
     role: str             # User role in organization
     email: Optional[str] = None
@@ -73,14 +74,14 @@ async def validate_clerk_token(token: str) -> dict:
         )
 
 
-async def resolve_org_membership(user_id: str, requested_org_id: str) -> tuple[str, str]:
+async def resolve_org_membership(user_id: str, requested_org_id: str) -> tuple[int, str, str]:
     """
     Resolve and verify organization membership from database.
     
     NEVER trust frontend-provided org_id - always verify server-side.
     
     Returns:
-        Tuple of (org_id, role)
+        Tuple of (db_user_id, org_id, role)
         
     Raises:
         HTTPException: If user is not a member of the organization
@@ -136,7 +137,7 @@ async def resolve_org_membership(user_id: str, requested_org_id: str) -> tuple[s
                 detail="Not a member of this organization"
             )
         
-        return str(membership["org_id"]), membership["role"]
+        return int(internal_user_id), str(membership["org_id"]), membership["role"]
         
     except asyncpg.PostgresError as e:
         logger.error(f"Database error during org resolution: {e}")
@@ -173,10 +174,11 @@ async def authenticate_websocket(websocket: WebSocket) -> AuthContext:
         raise HTTPException(status_code=401, detail="Invalid token")
     
     # Resolve organization membership (NEVER trust frontend org_id)
-    verified_org_id, role = await resolve_org_membership(user_id, org_id)
+    db_user_id, verified_org_id, role = await resolve_org_membership(user_id, org_id)
     
     return AuthContext(
         user_id=user_id,
+        db_user_id=db_user_id,
         org_id=verified_org_id,
         role=role,
         email=email
@@ -239,10 +241,11 @@ async def _get_current_user(
         )
     
     # Resolve organization membership
-    verified_org_id, role = await resolve_org_membership(user_id, x_org_id)
+    db_user_id, verified_org_id, role = await resolve_org_membership(user_id, x_org_id)
     
     return AuthContext(
         user_id=user_id,
+        db_user_id=db_user_id,
         org_id=verified_org_id,
         role=role,
         email=email
