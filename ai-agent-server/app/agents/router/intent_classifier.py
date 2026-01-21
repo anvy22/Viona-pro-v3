@@ -24,20 +24,32 @@ INTENT_CLASSIFICATION_PROMPT = """You are an intent classifier for Viona, a busi
 
 Classify the user's message into ONE of these categories:
 
-- analytics: Questions about business status, overview, how's business, performance, trends, reports, metrics, revenue, data, summaries
-- inventory: Questions about products, stock, warehouses, SKUs, low stock, overstock, items
-- orders: Questions about orders, sales, customers, order status, purchases
+- analytics: Questions about business status, overview, how's business, performance, trends, reports, metrics, revenue, data, summaries, forecasts, predictions, alerts
+- inventory: Questions about products, stock, warehouses, SKUs, low stock, overstock, items. Also: ADD product, UPDATE product, UPDATE stock, TRANSFER stock
+- orders: Questions about orders, sales, customers, order status, purchases. Also: CREATE order, UPDATE order, CANCEL order, SEARCH orders, customer history
 - insights: Requests for advice, suggestions, recommendations, how to grow, improvements, opportunities
 - general: ONLY for greetings like "hi" or "hello" with no question, or questions about what you can do
 
-IMPORTANT:
+IMPORTANT ACTION DETECTION:
+- "Create an order for..." → orders
+- "Add a new product..." → inventory
+- "Update stock for..." → inventory
+- "Transfer stock..." → inventory
+- "Cancel order #..." → orders
+- "Update order status..." → orders
+- "Search for products..." → inventory
+- "Find orders from..." → orders
+
+ANALYTICS DETECTION:
 - "How's my business?" → analytics
 - "What's the status?" → analytics  
 - "Give me an overview" → analytics
-- "How can I grow?" → insights
-- "Hi, what can you do?" → general
+- "Show me alerts" → analytics
+- "When will SKU run out?" → analytics
+- "What should I reorder?" → analytics
+- "Generate report" → analytics
 
-If the user asks ANYTHING about their business data, always classify as analytics, inventory, or orders.
+If the user asks ANYTHING about their business data OR wants to perform an action, always classify as analytics, inventory, or orders.
 Only use 'general' for pure greetings or meta questions about Viona itself.
 """
 

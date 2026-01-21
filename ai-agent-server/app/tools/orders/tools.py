@@ -253,15 +253,219 @@ class GetTopCustomersTool(BaseTool):
         })
 
 
+class SearchOrdersTool(BaseTool):
+    """Search orders by customer, status, or date."""
+    
+    name = "search_orders"
+    description = "Search for orders by customer email, name, order ID, or status"
+    
+    async def execute(
+        self,
+        query: str,
+        days: int = 90,
+        limit: int = 30
+    ) -> ToolResult:
+        """
+        Search orders.
+        
+        Args:
+            query: Search text (matches customer email, name, order ID, status)
+            days: Look back period
+            limit: Maximum results
+        """
+        from datetime import timedelta
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        
+        # Try to parse as order ID
+        order_id = None
+        try:
+            order_id = int(query)
+        except ValueError:
+            pass
+        
+        search_pattern = f"%{query}%"
+        
+        if order_id:
+            # Search by order ID
+            sql = '''
+                SELECT 
+                    o.order_id,
+                    o.customer_name,
+                    o.customer_email,
+                    o.status,
+                    o.total_amount,
+                    o.order_date,
+                    COUNT(oi.order_item_id) as item_count
+                FROM "Order" o
+                LEFT JOIN "OrderItem" oi ON oi.order_id = o.order_id
+                WHERE o.org_id = $1 AND o.order_id = $2
+                GROUP BY o.order_id
+            '''
+            results = await self.query(sql, int(self.org_id), order_id)
+        else:
+            # Search by text
+            sql = '''
+                SELECT 
+                    o.order_id,
+                    o.customer_name,
+                    o.customer_email,
+                    o.status,
+                    o.total_amount,
+                    o.order_date,
+                    COUNT(oi.order_item_id) as item_count
+                FROM "Order" o
+                LEFT JOIN "OrderItem" oi ON oi.order_id = o.order_id
+                WHERE o.org_id = $1 
+                  AND o.order_date >= $2
+                  AND (
+                      o.customer_email ILIKE $3
+                      OR o.customer_name ILIKE $3
+                      OR o.status ILIKE $3
+                  )
+                GROUP BY o.order_id
+                ORDER BY o.order_date DESC
+                LIMIT $4
+            '''
+            results = await self.query(sql, int(self.org_id), cutoff, search_pattern, limit)
+        
+        orders = []
+        for row in results:
+            orders.append({
+                "order_id": str(row["order_id"]),
+                "customer_name": row["customer_name"],
+                "customer_email": row["customer_email"],
+                "status": row["status"],
+                "total_amount": float(row["total_amount"]) if row["total_amount"] else 0,
+                "order_date": row["order_date"].isoformat() if row["order_date"] else None,
+                "item_count": row["item_count"]
+            })
+        
+        return ToolResult(success=True, data={
+            "orders": orders,
+            "count": len(orders),
+            "query": query
+        })
+
+
+class GetCustomerHistoryTool(BaseTool):
+    """Get complete purchase history for a customer."""
+    
+    name = "get_customer_history"
+    description = "Get full purchase history for a specific customer by email"
+    
+    async def execute(
+        self,
+        customer_email: str,
+        limit: int = 50
+    ) -> ToolResult:
+        """
+        Get customer history.
+        
+        Args:
+            customer_email: Customer email to look up
+            limit: Maximum orders to return
+        """
+        # Get orders
+        orders = await self.query(
+            '''
+            SELECT 
+                o.order_id,
+                o.customer_name,
+                o.status,
+                o.total_amount,
+                o.order_date
+            FROM "Order" o
+            WHERE o.org_id = $1 AND o.customer_email ILIKE $2
+            ORDER BY o.order_date DESC
+            LIMIT $3
+            ''',
+            int(self.org_id),
+            f"%{customer_email}%",
+            limit
+        )
+        
+        if not orders:
+            return ToolResult(success=True, data={
+                "customer_email": customer_email,
+                "found": False,
+                "message": f"No orders found for {customer_email}"
+            })
+        
+        # Calculate summary
+        total_orders = len(orders)
+        total_spent = sum(float(o["total_amount"] or 0) for o in orders)
+        avg_order = total_spent / total_orders if total_orders > 0 else 0
+        
+        # Get most purchased products
+        if orders:
+            order_ids = [o["order_id"] for o in orders]
+            placeholders = ",".join(str(oid) for oid in order_ids)
+            
+            products = await self.query(
+                f'''
+                SELECT 
+                    p.name,
+                    p.sku,
+                    SUM(oi.quantity) as total_quantity,
+                    SUM(oi.quantity * oi.price_at_order) as total_value
+                FROM "OrderItem" oi
+                JOIN "Product" p ON p.product_id = oi.product_id
+                WHERE oi.order_id IN ({placeholders})
+                GROUP BY p.product_id, p.name, p.sku
+                ORDER BY total_quantity DESC
+                LIMIT 10
+                ''',
+                int(self.org_id)
+            )
+        else:
+            products = []
+        
+        order_history = []
+        for o in orders:
+            order_history.append({
+                "order_id": str(o["order_id"]),
+                "date": o["order_date"].isoformat() if o["order_date"] else None,
+                "status": o["status"],
+                "amount": float(o["total_amount"]) if o["total_amount"] else 0
+            })
+        
+        top_products = []
+        for p in products:
+            top_products.append({
+                "name": p["name"],
+                "sku": p["sku"],
+                "total_quantity": p["total_quantity"],
+                "total_value": float(p["total_value"]) if p["total_value"] else 0
+            })
+        
+        return ToolResult(success=True, data={
+            "customer_email": customer_email,
+            "customer_name": orders[0]["customer_name"] if orders else None,
+            "found": True,
+            "summary": {
+                "total_orders": total_orders,
+                "total_spent": total_spent,
+                "average_order": avg_order,
+                "first_order": orders[-1]["order_date"].isoformat() if orders else None,
+                "last_order": orders[0]["order_date"].isoformat() if orders else None
+            },
+            "top_products": top_products,
+            "recent_orders": order_history[:10]
+        })
+
+
 # Export all tools
 ORDERS_TOOLS = [
     GetOrderListTool,
     GetOrderDetailsTool,
     GetOrderStatusBreakdownTool,
     GetTopCustomersTool,
+    SearchOrdersTool,
+    GetCustomerHistoryTool,
 ]
 
 
 def get_orders_tools(auth: AuthContext) -> list[BaseTool]:
     """Get instantiated orders tools for user."""
     return [ToolClass(auth) for ToolClass in ORDERS_TOOLS]
+

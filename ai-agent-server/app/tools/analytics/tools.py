@@ -101,6 +101,65 @@ class GetProductPerformanceTool(BaseTool):
                 COALESCE(SUM(oi.quantity), 0) as total_quantity,
                 COALESCE(SUM(oi.quantity * oi.price_at_order), 0) as total_revenue
             FROM "Product" p
+            INNER JOIN "OrderItem" oi ON oi.product_id = p.product_id
+            INNER JOIN "Order" o ON o.order_id = oi.order_id
+            WHERE p.org_id = $1 AND o.order_date >= $2
+            GROUP BY p.product_id, p.name, p.sku
+            ORDER BY {order_by}
+            LIMIT $3
+        '''
+        
+        results = await self.query(query, int(self.org_id), cutoff, limit)
+        
+        products = []
+        for row in results:
+            products.append({
+                "product_id": str(row["product_id"]),
+                "name": row["name"],
+                "sku": row["sku"],
+                "total_quantity": row["total_quantity"],
+                "total_revenue": float(row["total_revenue"] or 0)
+            })
+        
+        return ToolResult(success=True, data={
+            "products": products,
+            "period_days": days,
+            "sort_by": sort_by
+        })
+
+
+class GetLeastSellingProductsTool(BaseTool):
+    """Get least selling products - useful for identifying underperformers."""
+    
+    name = "get_least_selling_products"
+    description = "Get products with the lowest sales by revenue or quantity - helps identify underperforming products"
+    
+    async def execute(
+        self,
+        limit: int = 10,
+        days: int = 30,
+        sort_by: str = "revenue"
+    ) -> ToolResult:
+        """
+        Get least selling products.
+        
+        Args:
+            limit: Number of products to return
+            days: Period in days
+            sort_by: 'revenue' or 'quantity'
+        """
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        
+        order_by = "total_revenue ASC" if sort_by == "revenue" else "total_quantity ASC"
+        
+        query = f'''
+            SELECT 
+                p.product_id,
+                p.name,
+                p.sku,
+                COALESCE(SUM(oi.quantity), 0) as total_quantity,
+                COALESCE(SUM(oi.quantity * oi.price_at_order), 0) as total_revenue
+            FROM "Product" p
             LEFT JOIN "OrderItem" oi ON oi.product_id = p.product_id
             LEFT JOIN "Order" o ON o.order_id = oi.order_id 
                 AND o.order_date >= $2
@@ -125,7 +184,8 @@ class GetProductPerformanceTool(BaseTool):
         return ToolResult(success=True, data={
             "products": products,
             "period_days": days,
-            "sort_by": sort_by
+            "sort_by": sort_by,
+            "note": "Products with zero or low sales in this period"
         })
 
 
@@ -247,10 +307,9 @@ class GetRevenueByProductTool(BaseTool):
                 COALESCE(SUM(oi.quantity), 0) as units_sold,
                 COALESCE(SUM(oi.quantity * oi.price_at_order), 0) as revenue
             FROM "Product" p
-            LEFT JOIN "OrderItem" oi ON oi.product_id = p.product_id
-            LEFT JOIN "Order" o ON o.order_id = oi.order_id 
-                AND o.order_date >= $2
-            WHERE p.org_id = $1
+            INNER JOIN "OrderItem" oi ON oi.product_id = p.product_id
+            INNER JOIN "Order" o ON o.order_id = oi.order_id
+            WHERE p.org_id = $1 AND o.order_date >= $2
             GROUP BY p.product_id, p.name, p.sku
             HAVING COALESCE(SUM(oi.quantity * oi.price_at_order), 0) > 0
             ORDER BY revenue DESC
@@ -343,6 +402,7 @@ class GetAverageOrderValueTrendTool(BaseTool):
 ANALYTICS_TOOLS = [
     GetOrderSummaryTool,
     GetProductPerformanceTool,
+    GetLeastSellingProductsTool,
     GetRevenueByPeriodTool,
     GetInventorySummaryTool,
     GetRevenueByProductTool,
@@ -352,5 +412,12 @@ ANALYTICS_TOOLS = [
 
 def get_analytics_tools(auth: AuthContext) -> list[BaseTool]:
     """Get instantiated analytics tools for user."""
-    return [ToolClass(auth) for ToolClass in ANALYTICS_TOOLS]
+    from app.tools.analytics.forecasting import get_forecasting_tools
+    from app.tools.analytics.alerts import get_alerts_tools
+    
+    tools = [ToolClass(auth) for ToolClass in ANALYTICS_TOOLS]
+    tools.extend(get_forecasting_tools(auth))
+    tools.extend(get_alerts_tools(auth))
+    return tools
+
 

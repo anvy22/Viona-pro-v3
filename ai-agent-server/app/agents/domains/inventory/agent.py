@@ -15,6 +15,8 @@ from app.agents.base import (
 )
 from app.agents.prompts import INVENTORY_AGENT_PROMPT
 from app.tools.inventory import get_inventory_tools
+from app.tools.alerts import get_alerts_tools
+from app.tools.forecasting import get_forecasting_tools
 from app.memory import RedisMemoryStore
 
 logger = logging.getLogger(__name__)
@@ -40,8 +42,8 @@ class InventoryAgent(BaseAgent):
         )
         memory_messages = await memory.get_context_messages()
         
-        # Get tools
-        tools = get_inventory_tools(auth)
+        # Get tools (inventory + alerts + forecasting)
+        tools = get_inventory_tools(auth) + get_alerts_tools(auth) + get_forecasting_tools(auth)
         
         # Build messages
         messages = self.format_messages(state, memory_messages)
@@ -89,13 +91,27 @@ class InventoryAgent(BaseAgent):
             "stock": ["get_product_stock"],
             "inventory": ["get_product_stock", "get_warehouse_list"],
             "warehouse": ["get_warehouse_list"],
-            "product": ["get_product_catalog"],
+            "product": ["get_product_catalog", "search_products"],
             "catalog": ["get_product_catalog"],
             "low": ["get_product_stock"],
             "movement": ["get_stock_movement"],
             "sold": ["get_stock_movement"],
             "level": ["get_product_stock"],
             "all": ["get_product_stock", "get_warehouse_list"],
+            "search": ["search_products"],
+            "find": ["search_products"],
+            "overstock": ["get_overstock_detection"],
+            "imbalance": ["get_overstock_detection"],
+            # Alerts and forecasting keywords
+            "alert": ["low_stock_alerts"],
+            "critical": ["low_stock_alerts"],
+            "urgent": ["low_stock_alerts"],
+            "reorder": ["reorder_point_calculator"],
+            "health": ["inventory_health_report"],
+            "report": ["inventory_health_report"],
+            "score": ["inventory_health_report"],
+            "forecast": ["demand_forecast", "reorder_point_calculator"],
+            "predict": ["demand_forecast"],
         }
         
         tools_to_run = set()
@@ -127,17 +143,36 @@ class InventoryAgent(BaseAgent):
         return results
     
     def _is_empty_data(self, tool_results: dict) -> bool:
-        """Check if tool results indicate no inventory data."""
+        """Check if tool results indicate no data - generic check for ALL tools."""
+        if not tool_results:
+            return True
+        
         for tool_name, data in tool_results.items():
-            if isinstance(data, dict):
-                if data.get("error"):
-                    continue
-                if tool_name == "get_product_stock":
-                    if data.get("items") and len(data["items"]) > 0:
+            if not isinstance(data, dict):
+                continue
+            if data.get("error"):
+                continue
+            
+            # Generic check: look for common list keys that indicate data exists
+            list_keys = ["items", "warehouses", "products", "alerts", "recommendations", "forecasts"]
+            for key in list_keys:
+                if key in data and isinstance(data[key], list) and len(data[key]) > 0:
+                    return False
+            
+            # Check for count/total fields that indicate data exists
+            count_keys = ["total", "count", "total_products", "total_stock"]
+            for key in count_keys:
+                if key in data and data[key] and data[key] > 0:
+                    return False
+            
+            # If tool returned data with no error and has content, assume not empty
+            if len(data) > 0 and not data.get("error"):
+                for value in data.values():
+                    if isinstance(value, list) and len(value) > 0:
                         return False
-                if tool_name == "get_warehouse_list":
-                    if data.get("warehouses") and len(data["warehouses"]) > 0:
+                    if isinstance(value, (int, float)) and value > 0:
                         return False
+        
         return True
     
     def _create_empty_data_response(self) -> AgentOutput:

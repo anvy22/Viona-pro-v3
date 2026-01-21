@@ -17,6 +17,8 @@ from app.agents.base import (
 )
 from app.agents.prompts import ANALYTICS_AGENT_PROMPT
 from app.tools.analytics import get_analytics_tools
+from app.tools.forecasting import get_forecasting_tools
+from app.tools.alerts import get_alerts_tools
 from app.memory import RedisMemoryStore
 
 logger = logging.getLogger(__name__)
@@ -42,8 +44,8 @@ class AnalyticsAgent(BaseAgent):
         )
         memory_messages = await memory.get_context_messages()
         
-        # Get tools
-        tools = get_analytics_tools(auth)
+        # Get tools (analytics + forecasting + alerts)
+        tools = get_analytics_tools(auth) + get_forecasting_tools(auth) + get_alerts_tools(auth)
         
         # Build messages
         messages = self.format_messages(state, memory_messages)
@@ -117,21 +119,41 @@ class AnalyticsAgent(BaseAgent):
             "product": ["get_product_performance"],
             "inventory": ["get_inventory_summary"],
             "stock": ["get_inventory_summary"],
-            "trend": ["get_revenue_by_period"],
+            "trend": ["get_revenue_by_period", "trend_analysis"],
             "summary": ["get_order_summary", "get_inventory_summary"],
             "overview": ["get_order_summary", "get_inventory_summary"],
             "performance": ["get_product_performance"],
             "top": ["get_product_performance"],
+            # Least selling product keywords
+            "least": ["get_least_selling_products"],
+            "worst": ["get_least_selling_products"],
+            "bottom": ["get_least_selling_products"],
+            "lowest": ["get_least_selling_products"],
+            "slow": ["get_least_selling_products"],
+            "underperform": ["get_least_selling_products"],
+            "poor": ["get_least_selling_products"],
+            # Forecasting keywords
+            "forecast": ["demand_forecast", "reorder_point_calculator"],
+            "predict": ["demand_forecast", "trend_analysis"],
+            "demand": ["demand_forecast"],
+            "seasonal": ["seasonality_detection"],
+            "pattern": ["seasonality_detection", "trend_analysis"],
+            "reorder": ["reorder_point_calculator"],
+            # Alerts keywords
+            "anomal": ["sales_anomaly_detection"],
+            "unusual": ["sales_anomaly_detection"],
+            "goal": ["revenue_goal_tracking"],
+            "target": ["revenue_goal_tracking"],
             # Business advice keywords - fetch comprehensive data
-            "advice": ["get_order_summary", "get_inventory_summary", "get_product_performance", "get_revenue_by_period"],
-            "recommend": ["get_order_summary", "get_inventory_summary", "get_product_performance", "get_revenue_by_period"],
-            "grow": ["get_order_summary", "get_inventory_summary", "get_product_performance", "get_revenue_by_period"],
-            "improve": ["get_order_summary", "get_inventory_summary", "get_product_performance", "get_revenue_by_period"],
+            "advice": ["get_order_summary", "get_inventory_summary", "get_product_performance", "get_least_selling_products", "get_revenue_by_period", "trend_analysis"],
+            "recommend": ["get_order_summary", "get_inventory_summary", "get_product_performance", "get_least_selling_products", "get_revenue_by_period", "demand_forecast"],
+            "grow": ["get_order_summary", "get_inventory_summary", "get_product_performance", "get_least_selling_products", "get_revenue_by_period", "trend_analysis"],
+            "improve": ["get_order_summary", "get_inventory_summary", "get_product_performance", "get_least_selling_products", "get_revenue_by_period"],
             "suggest": ["get_order_summary", "get_inventory_summary", "get_product_performance", "get_revenue_by_period"],
-            "insight": ["get_order_summary", "get_inventory_summary", "get_product_performance"],
+            "insight": ["get_order_summary", "get_inventory_summary", "get_product_performance", "trend_analysis"],
             "opportunit": ["get_order_summary", "get_inventory_summary", "get_product_performance"],
             "optimi": ["get_order_summary", "get_inventory_summary", "get_product_performance"],
-            "what should": ["get_order_summary", "get_inventory_summary", "get_product_performance"],
+            "what should": ["get_order_summary", "get_inventory_summary", "get_product_performance", "demand_forecast"],
             "how can i": ["get_order_summary", "get_inventory_summary", "get_product_performance"],
         }
         
@@ -162,17 +184,36 @@ class AnalyticsAgent(BaseAgent):
         return results
     
     def _is_empty_data(self, tool_results: dict) -> bool:
-        """Check if all tool results indicate no data."""
+        """Check if all tool results indicate no data - generic check for ALL tools."""
+        if not tool_results:
+            return True
+        
         for tool_name, data in tool_results.items():
-            if isinstance(data, dict):
-                if data.get("error"):
-                    continue
-                if tool_name == "get_order_summary":
-                    if data.get("total_orders", 0) > 0:
+            if not isinstance(data, dict):
+                continue
+            if data.get("error"):
+                continue
+            
+            # Generic check: look for common list keys that indicate data exists
+            list_keys = ["products", "forecasts", "data", "items", "trends", "patterns", "anomalies", "alerts"]
+            for key in list_keys:
+                if key in data and isinstance(data[key], list) and len(data[key]) > 0:
+                    return False
+            
+            # Check for count/total fields that indicate data exists
+            count_keys = ["total_orders", "total_products", "total_revenue", "count", "total_products_analyzed"]
+            for key in count_keys:
+                if key in data and data[key] and data[key] > 0:
+                    return False
+            
+            # If tool returned data with no error and has content, assume not empty
+            if len(data) > 0 and not data.get("error"):
+                for value in data.values():
+                    if isinstance(value, list) and len(value) > 0:
                         return False
-                if tool_name == "get_inventory_summary":
-                    if data.get("total_products", 0) > 0:
+                    if isinstance(value, (int, float)) and value > 0:
                         return False
+        
         return True
     
     def _create_empty_data_response(self) -> AgentOutput:

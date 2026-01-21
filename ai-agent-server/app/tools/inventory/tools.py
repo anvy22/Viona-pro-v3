@@ -362,6 +362,75 @@ class GetOverstockDetectionTool(BaseTool):
         })
 
 
+class SearchProductsTool(BaseTool):
+    """Search products by name, SKU, or description."""
+    
+    name = "search_products"
+    description = "Search for products by name, SKU, or description text"
+    
+    async def execute(
+        self,
+        query: str,
+        limit: int = 20
+    ) -> ToolResult:
+        """
+        Search products.
+        
+        Args:
+            query: Search text (matches name, SKU, or description)
+            limit: Maximum results to return
+        """
+        search_pattern = f"%{query}%"
+        
+        sql = '''
+            SELECT 
+                p.product_id,
+                p.name,
+                p.sku,
+                p.description,
+                p.status,
+                pp.retail_price,
+                pp.actual_price,
+                COALESCE(SUM(ps.quantity), 0) as total_stock
+            FROM "Product" p
+            LEFT JOIN "ProductPrice" pp ON pp.product_id = p.product_id
+            LEFT JOIN "ProductStock" ps ON ps.product_id = p.product_id
+            WHERE p.org_id = $1 
+              AND (
+                  p.name ILIKE $2 
+                  OR p.sku ILIKE $2 
+                  OR p.description ILIKE $2
+              )
+            GROUP BY p.product_id, p.name, p.sku, p.description, 
+                     p.status, pp.retail_price, pp.actual_price
+            ORDER BY 
+                CASE WHEN p.name ILIKE $2 THEN 0 ELSE 1 END,
+                p.name
+            LIMIT $3
+        '''
+        
+        results = await self.query(sql, int(self.org_id), search_pattern, limit)
+        
+        products = []
+        for row in results:
+            products.append({
+                "product_id": str(row["product_id"]),
+                "name": row["name"],
+                "sku": row["sku"],
+                "description": row["description"][:100] + "..." if row["description"] and len(row["description"]) > 100 else row["description"],
+                "status": row["status"],
+                "retail_price": float(row["retail_price"]) if row["retail_price"] else None,
+                "actual_price": float(row["actual_price"]) if row["actual_price"] else None,
+                "total_stock": row["total_stock"]
+            })
+        
+        return ToolResult(success=True, data={
+            "products": products,
+            "count": len(products),
+            "query": query
+        })
+
+
 # Export all tools
 INVENTORY_TOOLS = [
     GetProductStockTool,
@@ -369,10 +438,12 @@ INVENTORY_TOOLS = [
     GetProductCatalogTool,
     GetStockMovementTool,
     GetOverstockDetectionTool,
+    SearchProductsTool,
 ]
 
 
 def get_inventory_tools(auth: AuthContext) -> list[BaseTool]:
     """Get instantiated inventory tools for user."""
     return [ToolClass(auth) for ToolClass in INVENTORY_TOOLS]
+
 
