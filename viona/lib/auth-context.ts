@@ -10,7 +10,7 @@ export type AuthContext = {
 };
 
 export async function getAuthContext(): Promise<AuthContext> {
-  const { userId: clerkId } = auth();
+  const { userId: clerkId } = await auth();
   if (!clerkId) throw new Error('Unauthorized');
 
   // Single DB call

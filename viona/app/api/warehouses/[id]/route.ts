@@ -27,10 +27,11 @@ type WarehouseDetail = {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
-    const { userId } = auth();
+    const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
@@ -43,7 +44,7 @@ export async function GET(
     }
 
     await ensureOrganizationMember(orgId);
-    const warehouseId = BigInt(params.id);
+    const warehouseId = BigInt(id);
     const bigOrgId = BigInt(orgId);
 
     const warehouse = await prisma.warehouse.findFirst({

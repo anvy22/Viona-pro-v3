@@ -1,14 +1,14 @@
 // app/inventory/components/ProductPriceChart.tsx
 "use client";
 
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
   ResponsiveContainer,
   ReferenceLine,
   Area,
@@ -20,12 +20,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState, useMemo } from "react";
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Minus, 
-  AlertCircle, 
-  DollarSign, 
+import {
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  AlertCircle,
+  DollarSign,
   BarChart3,
   LineChart as LineChartIcon,
   Activity,
@@ -85,7 +85,7 @@ export function ProductPriceChart({ priceHistory }: ProductPriceChartProps) {
       const retailPrice = item.retailPrice || 0;
       const actualPrice = item.actualPrice || 0;
       const marketPrice = item.marketPrice || 0;
-      
+
       // Calculate metrics
       const margin = actualPrice > 0 ? ((retailPrice - actualPrice) / retailPrice) * 100 : 0;
       const marketVariance = marketPrice > 0 ? ((retailPrice - marketPrice) / marketPrice) * 100 : 0;
@@ -98,10 +98,10 @@ export function ProductPriceChart({ priceHistory }: ProductPriceChartProps) {
       const marketTrend = prevItem ? marketPrice - (prevItem.marketPrice || 0) : 0;
 
       return {
-        date: date.toLocaleDateString('en-US', { 
-          month: 'short', 
+        date: date.toLocaleDateString('en-US', {
+          month: 'short',
           day: 'numeric',
-          year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined 
+          year: date.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
         }),
         fullDate: date.toISOString(),
         retailPrice,
@@ -114,7 +114,7 @@ export function ProductPriceChart({ priceHistory }: ProductPriceChartProps) {
         actualTrend,
         marketTrend,
         // Moving averages (7-period)
-        retailMA: index >= 6 ? 
+        retailMA: index >= 6 ?
           filteredHistory.slice(Math.max(0, index - 6), index + 1)
             .reduce((sum, item) => sum + (item.retailPrice || 0), 0) / Math.min(7, index + 1) : null,
       };
@@ -128,23 +128,23 @@ export function ProductPriceChart({ priceHistory }: ProductPriceChartProps) {
     const retailPrices = chartData.map(d => d.retailPrice).filter(p => p > 0);
     const actualPrices = chartData.map(d => d.actualPrice).filter(p => p && p > 0) as number[];
     const marketPrices = chartData.map(d => d.marketPrice).filter(p => p && p > 0) as number[];
-    
+
     const avgRetail = retailPrices.reduce((a, b) => a + b, 0) / retailPrices.length;
     const avgActual = actualPrices.length > 0 ? actualPrices.reduce((a, b) => a + b, 0) / actualPrices.length : 0;
     const avgMarket = marketPrices.length > 0 ? marketPrices.reduce((a, b) => a + b, 0) / marketPrices.length : 0;
-    
+
     const currentPrice = chartData[chartData.length - 1];
     const firstPrice = chartData[0];
     const priceChange = currentPrice.retailPrice - firstPrice.retailPrice;
     const priceChangePercent = (priceChange / firstPrice.retailPrice) * 100;
-    
+
     const avgMargin = chartData
       .map(d => d.margin)
       .filter(m => m > 0)
       .reduce((a, b, _, arr) => a + b / arr.length, 0);
 
     // Volatility calculation (standard deviation of price changes)
-    const priceChanges = chartData.slice(1).map((item, index) => 
+    const priceChanges = chartData.slice(1).map((item, index) =>
       item.retailPrice - chartData[index].retailPrice
     );
     const avgChange = priceChanges.reduce((a, b) => a + b, 0) / priceChanges.length;
@@ -173,19 +173,19 @@ export function ProductPriceChart({ priceHistory }: ProductPriceChartProps) {
       return (
         <div className="bg-background border border-border rounded-lg shadow-lg p-3 min-w-[250px]">
           <p className="font-medium mb-2">{label}</p>
-          
+
           <div className="space-y-1 text-sm">
             {payload.map((entry: any, index: number) => (
               <div key={index} className="flex justify-between items-center">
                 <div className="flex items-center gap-2">
-                  <div 
-                    className="w-3 h-3 rounded" 
-                    style={{ backgroundColor: entry.color }} 
+                  <div
+                    className="w-3 h-3 rounded"
+                    style={{ backgroundColor: entry.color }}
                   />
                   <span>{entry.name}:</span>
                 </div>
                 <span className="font-medium">
-                  {entry.name.includes('%') 
+                  {entry.name.includes('%')
                     ? `${entry.value.toFixed(1)}%`
                     : `$${entry.value.toFixed(2)}`
                   }
@@ -280,9 +280,8 @@ export function ProductPriceChart({ priceHistory }: ProductPriceChartProps) {
                 ${statistics.currentPrice.toFixed(2)}
               </div>
               <div className="text-sm text-muted-foreground">Current Price</div>
-              <div className={`text-xs mt-1 flex items-center justify-center gap-1 ${
-                statistics.priceChangePercent >= 0 ? 'text-green-600' : 'text-red-600'
-              }`}>
+              <div className={`text-xs mt-1 flex items-center justify-center gap-1 ${statistics.priceChangePercent >= 0 ? 'text-green-600' : 'text-red-600'
+                }`}>
                 {statistics.priceChangePercent >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                 {statistics.priceChangePercent.toFixed(1)}%
               </div>
@@ -357,26 +356,26 @@ export function ProductPriceChart({ priceHistory }: ProductPriceChartProps) {
             </div>
           </div>
         </CardHeader>
-        
+
         <CardContent>
           <div className="h-96">
             <ResponsiveContainer width="100%" height="100%">
               {chartType === "composed" ? (
                 <ComposedChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis 
-                    dataKey="date" 
+                  <XAxis
+                    dataKey="date"
                     tick={{ fontSize: 12 }}
                     stroke="#6b7280"
                   />
-                  <YAxis 
+                  <YAxis
                     yAxisId="price"
                     orientation="left"
                     tick={{ fontSize: 12 }}
                     stroke="#6b7280"
                     tickFormatter={(value) => `$${value.toFixed(0)}`}
                   />
-                  <YAxis 
+                  <YAxis
                     yAxisId="percentage"
                     orientation="right"
                     tick={{ fontSize: 12 }}
@@ -385,7 +384,7 @@ export function ProductPriceChart({ priceHistory }: ProductPriceChartProps) {
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend />
-                  
+
                   {/* Price lines */}
                   <Line
                     yAxisId="price"
@@ -447,13 +446,13 @@ export function ProductPriceChart({ priceHistory }: ProductPriceChartProps) {
                   {/* Reference lines */}
                   {statistics && (
                     <>
-                      <ReferenceLine 
+                      <ReferenceLine
                         yAxisId="price"
-                        y={statistics.avgRetail} 
-                        stroke={CHART_COLORS.retail} 
+                        y={statistics.avgRetail}
+                        stroke={CHART_COLORS.retail}
                         strokeDasharray="8 8"
                         strokeOpacity={0.5}
-                        label={{ value: `Avg: $${statistics.avgRetail.toFixed(2)}`, position: "topRight" }}
+                        label={{ value: `Avg: $${statistics.avgRetail.toFixed(2)}`, position: "insideTopRight" }}
                       />
                     </>
                   )}
@@ -462,14 +461,14 @@ export function ProductPriceChart({ priceHistory }: ProductPriceChartProps) {
                 <ComposedChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="#6b7280" />
-                  <YAxis 
-                    tick={{ fontSize: 12 }} 
+                  <YAxis
+                    tick={{ fontSize: 12 }}
                     stroke="#6b7280"
                     tickFormatter={(value) => `$${value.toFixed(0)}`}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend />
-                  
+
                   <Area
                     type="monotone"
                     dataKey="marketPrice"
@@ -501,14 +500,14 @@ export function ProductPriceChart({ priceHistory }: ProductPriceChartProps) {
                 <LineChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                   <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="#6b7280" />
-                  <YAxis 
-                    tick={{ fontSize: 12 }} 
+                  <YAxis
+                    tick={{ fontSize: 12 }}
                     stroke="#6b7280"
                     tickFormatter={(value) => `$${value.toFixed(0)}`}
                   />
                   <Tooltip content={<CustomTooltip />} />
                   <Legend />
-                  
+
                   <Line
                     type="monotone"
                     dataKey="retailPrice"
@@ -535,7 +534,7 @@ export function ProductPriceChart({ priceHistory }: ProductPriceChartProps) {
                     dot={{ fill: CHART_COLORS.market, r: 3 }}
                     connectNulls={false}
                   />
-                  
+
                   {/* Moving average trend */}
                   {showTrends && (
                     <Line

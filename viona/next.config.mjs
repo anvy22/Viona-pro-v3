@@ -1,8 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -15,48 +12,9 @@ const nextConfig = {
       '@radix-ui/react-dialog'
     ]
   },
-  
-  webpack: (config, { isServer }) => {
-    if (!isServer) {
-      config.optimization.splitChunks = {
-        ...config.optimization.splitChunks,
-        cacheGroups: {
-          ...config.optimization.splitChunks.cacheGroups,
-          recharts: {
-            name: 'recharts',
-            chunks: 'async',
-            test: /[\\/]node_modules[\\/](recharts)[\\/]/,
-            priority: 30,
-          },
-          lucide: {
-            name: 'lucide',
-            chunks: 'async', 
-            test: /[\\/]node_modules[\\/](lucide-react)[\\/]/,
-            priority: 25,
-          },
-          ui: {
-            name: 'ui',
-            chunks: 'async',
-            test: /[\\/]components[\\/]ui[\\/]/,
-            priority: 20,
-          }
-        }
-      };
-    }
-    return config;
-  },
 
-  swcMinify: true,
-  
   images: {
     formats: ['image/avif', 'image/webp'],
-    domains: [
-      'res.cloudinary.com',
-      'dxbyd5wae.cloudinary.com',
-      'images.unsplash.com',
-      'via.placeholder.com',
-      'picsum.photos',
-    ],
     remotePatterns: [
       {
         protocol: 'https',

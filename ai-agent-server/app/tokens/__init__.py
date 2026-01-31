@@ -1,6 +1,6 @@
 # Tokens module
 from .limiter import TokenLimiter, TokenUsage, TokenQuota, QuotaExceededError
-from .publisher import emit_token_event, get_kafka_publisher
+from .publisher import emit_token_event, get_rabbitmq_connection
 
 __all__ = [
     "TokenLimiter",
@@ -8,5 +8,5 @@ __all__ = [
     "TokenQuota",
     "QuotaExceededError",
     "emit_token_event",
-    "get_kafka_publisher",
+    "get_rabbitmq_connection",
 ]

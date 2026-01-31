@@ -1,42 +1,54 @@
 """
-Kafka Token Usage Publisher
+RabbitMQ Token Usage Publisher
 
 Emits token usage events for billing and observability.
 """
 
 import json
 import logging
-from datetime import datetime, timezone
+import asyncio
 from typing import Optional
+from datetime import datetime, timezone
 
-from aiokafka import AIOKafkaProducer
+import aio_pika
+from aio_pika.abc import AbstractConnection, AbstractChannel
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-_kafka_producer: Optional[AIOKafkaProducer] = None
+_connection: Optional[AbstractConnection] = None
+_channel: Optional[AbstractChannel] = None
 
 
-async def get_kafka_publisher() -> Optional[AIOKafkaProducer]:
-    """Get or create Kafka producer."""
-    global _kafka_producer
+async def get_rabbitmq_connection() -> Optional[AbstractChannel]:
+    """Get or create RabbitMQ channel."""
+    global _connection, _channel
     
-    if _kafka_producer is None:
-        try:
-            _kafka_producer = AIOKafkaProducer(
-                bootstrap_servers=settings.kafka_broker,
-                client_id=settings.kafka_client_id,
-                value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-            )
-            await _kafka_producer.start()
-            logger.info(f"Kafka producer connected to {settings.kafka_broker}")
-        except Exception as e:
-            logger.error(f"Failed to connect to Kafka: {e}")
-            return None
-    
-    return _kafka_producer
+    if _connection and not _connection.is_closed and _channel and not _channel.is_closed:
+        return _channel
+
+    try:
+        logger.info(f"Connecting to RabbitMQ at {settings.rabbitmq_url}...")
+        _connection = await aio_pika.connect_robust(
+            settings.rabbitmq_url, 
+            client_properties={"connection_name": settings.rabbitmq_client_id}
+        )
+        
+        _channel = await _connection.channel()
+        
+        # Declare queue to ensure it exists
+        await _channel.declare_queue(
+            settings.rabbitmq_token_queue, 
+            durable=True
+        )
+        
+        logger.info("✅ RabbitMQ Publisher Connected")
+        return _channel
+    except Exception as e:
+        logger.error(f"Failed to connect to RabbitMQ: {e}")
+        return None
 
 
 async def emit_token_event(
@@ -49,24 +61,12 @@ async def emit_token_event(
     estimated_cost: float,
 ) -> bool:
     """
-    Emit token usage event to Kafka.
-    
-    Schema:
-    {
-        "org_id": "string",
-        "user_id": "string", 
-        "model": "string",
-        "provider": "string",
-        "input_tokens": int,
-        "output_tokens": int,
-        "estimated_cost": float,
-        "timestamp": "ISO8601"
-    }
+    Emit token usage event to RabbitMQ.
     """
-    producer = await get_kafka_publisher()
+    channel = await get_rabbitmq_connection()
     
-    if producer is None:
-        logger.warning("Kafka unavailable, token event dropped")
+    if channel is None:
+        logger.warning("RabbitMQ unavailable, token event dropped")
         return False
     
     event = {
@@ -82,9 +82,29 @@ async def emit_token_event(
     }
     
     try:
-        await producer.send_and_wait(settings.kafka_token_topic, event)
+        await channel.default_exchange.publish(
+            aio_pika.Message(
+                body=json.dumps(event).encode(),
+                delivery_mode=aio_pika.DeliveryMode.PERSISTENT
+            ),
+            routing_key=settings.rabbitmq_token_queue
+        )
         logger.debug(f"Token event emitted: {event}")
         return True
     except Exception as e:
         logger.error(f"Failed to emit token event: {e}")
         return False
+
+
+async def close_rabbitmq_connection():
+    """Close RabbitMQ connection."""
+    global _connection, _channel
+    
+    if _channel and not _channel.is_closed:
+        await _channel.close()
+    
+    if _connection and not _connection.is_closed:
+        await _connection.close()
+        
+    logger.info("✅ RabbitMQ Connection Closed")
+

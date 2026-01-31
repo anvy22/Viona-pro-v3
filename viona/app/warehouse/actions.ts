@@ -4,7 +4,7 @@ import prisma from '@/lib/prisma';
 import { auth } from '@clerk/nextjs/server';
 import { getUserRole, hasPermission, ensureOrganizationMember } from '@/lib/auth';
 import { revalidatePath, revalidateTag } from 'next/cache';
-import { sendNotification } from '@/lib/kafka-producer';
+import { sendNotification } from '@/lib/rabbitmq';
 
 function invalidateWarehouseCaches() {
   revalidateTag('warehouses');
@@ -12,7 +12,7 @@ function invalidateWarehouseCaches() {
 }
 
 export async function createWarehouse(orgId: string, data: { name: string; address: string }) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
 
   if (!data.name?.trim()) throw new Error('Warehouse name is required');
@@ -20,7 +20,7 @@ export async function createWarehouse(orgId: string, data: { name: string; addre
 
   try {
     await ensureOrganizationMember(orgId);
-    
+
     const role = await getUserRole(orgId);
     if (!hasPermission(role, ['writer', 'read-write', 'admin'])) {
       throw new Error('Insufficient permissions to create warehouse');
@@ -114,7 +114,7 @@ export async function updateWarehouse(
   warehouseId: string,
   data: { name: string; address: string }
 ) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
 
   if (!data.name?.trim()) throw new Error('Warehouse name is required');
@@ -122,7 +122,7 @@ export async function updateWarehouse(
 
   try {
     await ensureOrganizationMember(orgId);
-    
+
     const role = await getUserRole(orgId);
     if (!hasPermission(role, ['writer', 'read-write', 'admin'])) {
       throw new Error('Insufficient permissions to update warehouse');
@@ -222,12 +222,12 @@ export async function updateWarehouse(
 }
 
 export async function deleteWarehouse(orgId: string, warehouseId: string) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
 
   try {
     await ensureOrganizationMember(orgId);
-    
+
     const role = await getUserRole(orgId);
     if (!hasPermission(role, ['admin'])) {
       throw new Error('Only admins can delete warehouses');
@@ -322,7 +322,7 @@ export async function deleteWarehouse(orgId: string, warehouseId: string) {
 }
 
 export async function ensureDefaultWarehouse(orgId: string) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
 
   try {

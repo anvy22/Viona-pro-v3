@@ -4,41 +4,41 @@
 import prisma from '@/lib/prisma';
 import { auth } from '@clerk/nextjs/server';
 import { currentUser } from '@clerk/nextjs/server';
-import { getUserRole, hasPermission, ensureOrganizationMember } from '@/lib/auth'; 
+import { getUserRole, hasPermission, ensureOrganizationMember } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
-import { sendNotification } from '@/lib/kafka-producer';
+import { sendNotification } from '@/lib/rabbitmq';
 
 // Cache user lookup to avoid repeated queries
 async function getOrCreateUser(userId: string) {
-  let user = await prisma.user.findUnique({ 
+  let user = await prisma.user.findUnique({
     where: { clerk_id: userId },
     select: { user_id: true, email: true, clerk_id: true }
   });
-  
+
   if (!user) {
     const clerkUser = await currentUser();
     if (!clerkUser?.emailAddresses[0]?.emailAddress) {
       throw new Error('Unable to get user email from Clerk');
     }
-    
+
     user = await prisma.user.create({
-      data: { 
-        clerk_id: userId, 
+      data: {
+        clerk_id: userId,
         email: clerkUser.emailAddresses[0].emailAddress
       },
       select: { user_id: true, email: true, clerk_id: true }
     });
   }
-  
+
   return user;
 }
 
 async function getOrCreateDefaultWarehouse(orgId: BigInt) {
   let warehouse = await prisma.warehouse.findFirst({
-    where: { org_id: Number(orgId)},
+    where: { org_id: Number(orgId) },
     select: { warehouse_id: true, name: true }
   });
-  
+
   if (!warehouse) {
     warehouse = await prisma.warehouse.create({
       data: {
@@ -49,21 +49,21 @@ async function getOrCreateDefaultWarehouse(orgId: BigInt) {
       select: { warehouse_id: true, name: true }
     });
   }
-  
+
   return warehouse;
 }
 
 export async function addOrder(orgId: string, newOrder: any) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
-  
+
   // Input validation
   if (!orgId) throw new Error('Organization ID is required');
   if (!newOrder) throw new Error('Order data is required');
   if (!newOrder.orderDate) throw new Error('Order date is required');
   if (!newOrder.status?.trim()) throw new Error('Order status is required');
   if (!newOrder.orderItems || newOrder.orderItems.length === 0) throw new Error('At least one order item is required');
-  
+
   // Customer information validation
   if (!newOrder.customer) throw new Error('Customer information is required');
   if (!newOrder.customer.name?.trim()) throw new Error('Customer name is required');
@@ -72,14 +72,14 @@ export async function addOrder(orgId: string, newOrder: any) {
 
   try {
     const bigOrgId = BigInt(orgId);
-    
+
     // Ensure user is organization member and has proper role
     await ensureOrganizationMember(orgId);
-    
+
     // Get user role after ensuring membership
     const role = await getUserRole(orgId);
     console.log(`addOrder: Retrieved role "${role}" (type: ${typeof role}) for orgId ${orgId}`);
-    
+
     // Permission check with explicit role validation
     if (!role || !hasPermission(role, ['writer', 'read-write', 'admin'])) {
       throw new Error(`Insufficient permissions to add orders. Current role: "${role}"`);
@@ -87,13 +87,13 @@ export async function addOrder(orgId: string, newOrder: any) {
 
     // Get or create user record
     const user = await getOrCreateUser(userId);
-    
+
     // Get organization name for notifications
     const org = await prisma.organization.findUnique({
       where: { org_id: bigOrgId },
       select: { name: true }
     });
-    
+
     // Sanitize input data
     const orderDate = new Date(newOrder.orderDate);
     const trimmedStatus = newOrder.status.trim();
@@ -106,9 +106,9 @@ export async function addOrder(orgId: string, newOrder: any) {
     }
 
     // Execute transaction for atomic order creation
-    const result = await prisma.$transaction(async (tx:any) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       console.log(`Transaction: Creating order with status "${trimmedStatus}" on ${orderDate}`);
-      
+
       // Create the order with customer information
       const order = await tx.order.create({
         data: {
@@ -132,14 +132,14 @@ export async function addOrder(orgId: string, newOrder: any) {
           shipping_method: newOrder.shippingMethod?.trim() || 'standard',
           payment_method: newOrder.paymentMethod?.trim() || 'credit_card',
         },
-        select: { 
-          order_id: true, 
-          order_date: true, 
+        select: {
+          order_id: true,
+          order_date: true,
           status: true,
           total_amount: true,
           customer_name: true,
           customer_email: true,
-          created_at: true 
+          created_at: true
         }
       });
 
@@ -152,7 +152,7 @@ export async function addOrder(orgId: string, newOrder: any) {
 
       for (const item of newOrder.orderItems) {
         const productId = BigInt(item.product.id);
-        
+
         // Fetch current product price if not provided
         let priceAtOrder = item.priceAtOrder;
         if (!priceAtOrder) {
@@ -274,7 +274,7 @@ export async function addOrder(orgId: string, newOrder: any) {
 
   } catch (error) {
     console.error('Error in addOrder:', error);
-    
+
     if (error instanceof Error) {
       if (error.message.includes('Cannot convert') && error.message.includes('BigInt')) {
         throw new Error('Invalid organization ID format');
@@ -295,7 +295,7 @@ export async function addOrder(orgId: string, newOrder: any) {
 }
 
 export async function updateOrder(orgId: string, id: string, updatedOrder: any) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
   if (!orgId) throw new Error('Organization ID is required');
   if (!id) throw new Error('Order ID is required');
@@ -311,15 +311,15 @@ export async function updateOrder(orgId: string, id: string, updatedOrder: any) 
   // Add validation for order items structure - FIX FOR THE ERROR
   if (updatedOrder.orderItems) {
     console.log('Validating order items structure:', JSON.stringify(updatedOrder.orderItems, null, 2));
-    
+
     for (let i = 0; i < updatedOrder.orderItems.length; i++) {
       const item = updatedOrder.orderItems[i];
       console.log(`Item ${i}:`, JSON.stringify(item, null, 2));
-      
+
       if (!item.quantity || item.quantity <= 0) {
         throw new Error(`Invalid quantity for item ${i + 1}`);
       }
-      
+
       // Check for product reference in multiple possible formats
       const hasProductId = item.product?.id || item.productId || item.product_id;
       if (!hasProductId) {
@@ -331,9 +331,9 @@ export async function updateOrder(orgId: string, id: string, updatedOrder: any) 
 
   try {
     const bigOrgId = BigInt(orgId);
-    
+
     await ensureOrganizationMember(orgId);
-    
+
     const role = await getUserRole(orgId);
     if (!hasPermission(role, ['writer', 'read-write', 'admin'])) {
       throw new Error('Insufficient permissions to update orders');
@@ -354,8 +354,8 @@ export async function updateOrder(orgId: string, id: string, updatedOrder: any) 
         order_id: orderId,
         org_id: bigOrgId,
       },
-      select: { 
-        order_id: true, 
+      select: {
+        order_id: true,
         orderItems: true,
         customer_name: true,
         status: true,
@@ -369,9 +369,9 @@ export async function updateOrder(orgId: string, id: string, updatedOrder: any) 
 
     const oldStatus = existingOrder.status;
 
-    const result = await prisma.$transaction(async (tx:any) => {
+    const result = await prisma.$transaction(async (tx: any) => {
       console.log(`Transaction: Updating order ${orderId}`);
-      
+
       // Prepare update data
       const updateData: any = {
         order_date: updatedOrder.orderDate ? new Date(updatedOrder.orderDate) : undefined,
@@ -448,10 +448,10 @@ export async function updateOrder(orgId: string, id: string, updatedOrder: any) 
         // Create new items and deduct stock - FIXED TO HANDLE MULTIPLE DATA FORMATS
         for (const item of updatedOrder.orderItems) {
           console.log('Processing item:', JSON.stringify(item, null, 2));
-          
+
           // Handle different possible data structures for product ID - THE FIX
           let productId: BigInt;
-          
+
           if (item.product && item.product.id) {
             // Case 1: item has product object with id
             productId = BigInt(item.product.id);
@@ -465,7 +465,7 @@ export async function updateOrder(orgId: string, id: string, updatedOrder: any) 
             console.error('Invalid item structure:', item);
             throw new Error(`Invalid product reference in order item. Expected item.product.id, item.productId, or item.product_id`);
           }
-          
+
           let priceAtOrder = item.priceAtOrder || item.price_at_order;
           if (!priceAtOrder) {
             const latestPrice = await tx.productPrice.findFirst({
@@ -549,7 +549,7 @@ export async function updateOrder(orgId: string, id: string, updatedOrder: any) 
     // ✅ Notify admins if status changed significantly
     const statusChanged = oldStatus !== result.status;
     const importantStatuses = ['completed', 'cancelled', 'shipped'];
-    
+
     if (statusChanged && importantStatuses.includes(result.status?.toLowerCase() || '')) {
       const orgAdmins = await prisma.organizationMember.findMany({
         where: {
@@ -587,7 +587,7 @@ export async function updateOrder(orgId: string, id: string, updatedOrder: any) 
 
   } catch (error) {
     console.error('Error updating order:', error);
-    
+
     if (error instanceof Error) {
       if (error.message.includes('Cannot convert') && error.message.includes('BigInt')) {
         throw new Error('Invalid organization or order ID format');
@@ -612,16 +612,16 @@ export async function getRole(orgId: string) {
 }
 
 export async function deleteOrder(orgId: string, id: string) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
   if (!orgId) throw new Error('Organization ID is required');
   if (!id) throw new Error('Order ID is required');
 
   try {
     const bigOrgId = BigInt(orgId);
-    
+
     await ensureOrganizationMember(orgId);
-    
+
     const role = await getUserRole(orgId);
     if (!hasPermission(role, ['writer', 'read-write', 'admin'])) {
       throw new Error('Insufficient permissions to delete orders');
@@ -642,8 +642,8 @@ export async function deleteOrder(orgId: string, id: string) {
         order_id: orderId,
         org_id: bigOrgId,
       },
-      include: { 
-        orderItems: true 
+      include: {
+        orderItems: true
       }
     });
 
@@ -658,7 +658,7 @@ export async function deleteOrder(orgId: string, id: string) {
 
     const customerName = existingOrder.customer_name;
 
-    await prisma.$transaction(async (tx:any) => {
+    await prisma.$transaction(async (tx: any) => {
       const warehouse = await getOrCreateDefaultWarehouse(bigOrgId);
 
       // Add back stock
@@ -723,30 +723,30 @@ export async function deleteOrder(orgId: string, id: string) {
 
   } catch (error) {
     console.error('Error deleting order:', error);
-    
+
     if (error instanceof Error) {
       if (error.message.includes('Cannot convert') && error.message.includes('BigInt')) {
         throw new Error('Invalid organization or order ID format');
       }
       throw error;
     }
-    
+
     throw new Error('Failed to delete order. Please try again.');
   }
 }
 
 // Bulk operations
 export async function bulkUpdateOrders(orgId: string, updates: { id: string; data: any }[]) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
   if (!orgId) throw new Error('Organization ID is required');
   if (!updates || updates.length === 0) throw new Error('No updates provided');
 
   try {
     const bigOrgId = BigInt(orgId);
-    
+
     await ensureOrganizationMember(orgId);
-    
+
     const role = await getUserRole(orgId);
     if (!hasPermission(role, ['writer', 'read-write', 'admin'])) {
       throw new Error('Insufficient permissions to update orders');
@@ -760,12 +760,12 @@ export async function bulkUpdateOrders(orgId: string, updates: { id: string; dat
       select: { name: true }
     });
 
-    const results = await prisma.$transaction(async (tx:any) => {
+    const results = await prisma.$transaction(async (tx: any) => {
       const updateResults = [];
-      
+
       for (const update of updates) {
         const orderId = BigInt(update.id);
-        
+
         // Prepare update data (keeping customer info if provided)
         const updateData: any = {
           order_date: update.data.orderDate ? new Date(update.data.orderDate) : undefined,
@@ -809,7 +809,7 @@ export async function bulkUpdateOrders(orgId: string, updates: { id: string; dat
       priority: 'MEDIUM',
       link: `/orders`,
     });
-    
+
     revalidatePath('/orders');
     revalidatePath('/dashboard');
     revalidatePath(`/orders/${orgId}`);
@@ -823,14 +823,14 @@ export async function bulkUpdateOrders(orgId: string, updates: { id: string; dat
 
   } catch (error) {
     console.error("Bulk update orders error:", error);
-    
+
     if (error instanceof Error) {
       if (error.message.includes('Cannot convert') && error.message.includes('BigInt')) {
         throw new Error('Invalid organization or order ID format');
       }
       throw error;
     }
-    
+
     throw new Error('Failed to update orders. Please try again.');
   }
 }

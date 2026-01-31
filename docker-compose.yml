@@ -1,40 +1,15 @@
 services:
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
-    environment:
-       ZOOKEEPER_CLIENT_PORT: 2181
-       ZOOKEEPER_TICK_TIME: 2000
+  rabbitmq:
+    image: rabbitmq:3-management
     ports:
-       - "2181:2181"
+      - "5672:5672"
+      - "15672:15672"
     healthcheck:
-       test: ["CMD-SHELL", "cub zk-ready localhost:2181 30"]
-       interval: 10s
-       timeout: 10s
-       retries: 5
-       start_period: 40s
-
-  kafka:
-    image: confluentinc/cp-kafka:7.5.0
-    depends_on:
-      zookeeper:
-        condition: service_healthy
-    ports:   
-      - "29092:29092"    
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-    healthcheck:
-      test: ["CMD-SHELL", "cub kafka-ready -b kafka:9092 1 30"]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
       timeout: 10s
-      retries: 10
-      start_period: 40s
+      retries: 5
+      start_period: 20s
 
   redis:
     image: redis:7.0.11
@@ -65,10 +40,9 @@ services:
     restart: always
     environment:
       MONGO_URL: mongodb://root:password@mongodb:27017/notification?authSource=admin
-      KAFKA_BROKER: kafka:9092
-      KAFKA_NOTIFICATION_TOPIC: send_notification
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
     depends_on:
-      kafka:
+      rabbitmq:
         condition: service_healthy
       mongodb:
         condition: service_healthy
@@ -91,14 +65,14 @@ services:
     environment:
       # Runtime environment variables (server-side only)
       NODE_ENV: production
-      KAFKA_BROKER: kafka:9092
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: redis://redis:6379 
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
     depends_on:
-      kafka:
+      rabbitmq:
         condition: service_healthy
       notification-server:
         condition: service_started
@@ -119,11 +93,11 @@ services:
       # Infrastructure Overrides (Docker Network)
       REDIS_URL: redis://redis:6379
       MONGO_URL: mongodb://root:password@mongodb:27017
-      KAFKA_BROKER: kafka:9092
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
       # Shared Secrets
       DATABASE_URL: ${DATABASE_URL}
     depends_on:
-      kafka:
+      rabbitmq:
         condition: service_healthy
       redis:
         condition: service_started

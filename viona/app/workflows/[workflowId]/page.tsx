@@ -277,8 +277,9 @@ export default function WorkflowEditorPage() {
                             onAddNode={addNodeFromLibrary}
                             onUpdateNode={updateNode}
                             onConnect={handleConnect}
-                            onDeleteNodes={handleDeleteNodes}  
+                            onDeleteNodes={handleDeleteNodes}
                             onDeleteEdges={handleDeleteEdges}
+                            selectedNode={selectedNode}
                         />
                     </div>
 

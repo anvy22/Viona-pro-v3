@@ -3,7 +3,7 @@
 import prisma from "@/lib/prisma";
 import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
-import { sendNotification } from "@/lib/kafka-producer";
+import { sendNotification } from "@/lib/rabbitmq";
 import {
   invalidateOrgMemberCache,
   invalidateUserCache,
@@ -14,7 +14,7 @@ import {
  * Only returns details if user is authenticated and email matches
  */
 export async function getInviteDetails(token: string) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) {
     throw new Error("Authentication required to view invitation details");
   }
@@ -27,8 +27,8 @@ export async function getInviteDetails(token: string) {
     // Get current user details
     const currentUser = await prisma.user.findUnique({
       where: { clerk_id: userId },
-      select: { 
-        email: true, 
+      select: {
+        email: true,
         user_id: true,
         clerk_id: true,
       },
@@ -133,11 +133,11 @@ export async function getInviteDetails(token: string) {
     };
   } catch (error) {
     console.error("Error fetching invite details:", error);
-    
+
     if (error instanceof Error) {
       throw error;
     }
-    
+
     throw new Error("Failed to load invitation details. Please try again.");
   }
 }
@@ -146,7 +146,7 @@ export async function getInviteDetails(token: string) {
  * Accept invitation - REQUIRES AUTHENTICATION + EMAIL VERIFICATION
  */
 export async function acceptInvite(token: string) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) {
     throw new Error("Authentication required to accept invitation");
   }
@@ -159,10 +159,10 @@ export async function acceptInvite(token: string) {
     // Get current user
     const user = await prisma.user.findUnique({
       where: { clerk_id: userId },
-      select: { 
-        user_id: true, 
-        email: true, 
-        clerk_id: true 
+      select: {
+        user_id: true,
+        email: true,
+        clerk_id: true
       },
     });
 
@@ -245,7 +245,7 @@ export async function acceptInvite(token: string) {
       // Update invite status (NO updated_at field in schema)
       await tx.organizationInvite.update({
         where: { invite_id: invite.invite_id },
-        data: { 
+        data: {
           status: "accepted",
         },
       });
@@ -310,11 +310,11 @@ export async function acceptInvite(token: string) {
     return result.orgId;
   } catch (error) {
     console.error("Error accepting invite:", error);
-    
+
     if (error instanceof Error) {
       throw error;
     }
-    
+
     throw new Error("Failed to accept invitation. Please try again.");
   }
 }
@@ -323,7 +323,7 @@ export async function acceptInvite(token: string) {
  * Decline invitation - REQUIRES AUTHENTICATION + EMAIL VERIFICATION
  */
 export async function declineInvite(token: string) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) {
     throw new Error("Authentication required");
   }
@@ -370,7 +370,7 @@ export async function declineInvite(token: string) {
     // Update invite status (NO updated_at field)
     await prisma.organizationInvite.update({
       where: { invite_id: invite.invite_id },
-      data: { 
+      data: {
         status: "declined",
       },
     });
@@ -404,11 +404,11 @@ export async function declineInvite(token: string) {
     return { success: true };
   } catch (error) {
     console.error("Error declining invite:", error);
-    
+
     if (error instanceof Error) {
       throw error;
     }
-    
+
     throw new Error("Failed to decline invitation");
   }
 }

@@ -38,9 +38,10 @@ class Settings(BaseSettings):
     mongo_db_name: str = "viona_agents"
 
     # Kafka
-    kafka_broker: str = "localhost:29092"
-    kafka_token_topic: str = "token_usage"
-    kafka_client_id: str = "viona-ai-agent"
+    # RabbitMQ
+    rabbitmq_url: str = "amqp://guest:guest@localhost:5672"
+    rabbitmq_token_queue: str = "token_usage"
+    rabbitmq_client_id: str = "viona-ai-agent"
 
     # Database (read-only for tools)
     database_url: str = ""

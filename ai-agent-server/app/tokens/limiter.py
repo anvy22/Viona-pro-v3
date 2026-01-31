@@ -127,7 +127,7 @@ class TokenLimiter:
         Record token usage after LLM call.
         
         1. Atomically increment Redis counter
-        2. Emit Kafka event for billing/observability
+        2. Emit RabbitMQ event for billing/observability
         
         Returns:
             New total usage
@@ -142,7 +142,7 @@ class TokenLimiter:
             f"total={new_total}, model={usage.model}"
         )
         
-        # Emit Kafka event
+        # Emit RabbitMQ event
         if emit_event:
             from app.tokens.publisher import emit_token_event
             await emit_token_event(

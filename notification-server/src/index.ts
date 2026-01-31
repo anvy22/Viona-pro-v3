@@ -1,12 +1,12 @@
 import { createApp } from "./app.js";
 import { ENV } from "./config/env.js";
 import { connectMongo } from "./config/mongo.js";
-import { startKafkaConsumer } from "./kafka/consumer.js";
+import { startRabbitMQConsumer } from "./rabbitmq/consumer.js";
 
 const start = async () => {
   try {
     await connectMongo();
-    await startKafkaConsumer();
+    await startRabbitMQConsumer();
 
     const app = createApp();
 

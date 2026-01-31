@@ -7,7 +7,7 @@ import { revalidatePath, revalidateTag, unstable_cache } from 'next/cache';
 import { getAuthContext } from '@/lib/auth-context';
 import { notifyAsync } from '@/lib/notify';
 import { getOrgAccess } from '@/lib/org-access';
-import { sendNotification } from '@/lib/kafka-producer';
+import { sendNotification } from '@/lib/rabbitmq';
 import crypto from 'crypto';
 import {
   getUserRole,
@@ -118,17 +118,17 @@ export async function getCachedUserOrganizations(
 
       return Array.from(map.values());
     },
-   
+
     [`user-orgs:${clerkId}`],
     { revalidate: 600 }
   );
 
-  
+
   return cachedFn();
 }
 
 export async function getUserOrganizations(): Promise<SimpleOrg[]> {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
 
   const orgs = await getCachedUserOrganizations(userId);
@@ -162,6 +162,7 @@ export async function createOrganization(name: string) {
     userId: clerkId,
     title: 'Organization Created',
     message: `Created "${org.name}"`,
+    type: 'system',
     link: `/organization/${org.org_id}`,
   });
 
@@ -197,6 +198,7 @@ export async function updateOrganization(orgId: string, name: string) {
         userId: m.user.clerk_id,
         title: 'Organization Updated',
         message: `Renamed to "${org.name}"`,
+        type: 'system',
         link: `/organization/${orgId}`,
       })
     )
@@ -209,15 +211,15 @@ export async function updateOrganization(orgId: string, name: string) {
 // DELETE ORGANIZATION + NOTIFY
 // ============================================
 export async function deleteOrganization(orgId: string, force: boolean = false) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
   if (!orgId) throw new Error('Organization ID is required');
 
   try {
     const bigOrgId = BigInt(orgId);
-    
+
     await ensureOrganizationMember(orgId);
-    
+
     const role = await getUserRole(orgId);
     if (!(await hasPermission(role, ['admin']))) {
       throw new Error('Only admins can delete organizations');
@@ -250,7 +252,7 @@ export async function deleteOrganization(orgId: string, force: boolean = false) 
       if (warehouses > 0) dataDetails.push(`${warehouses} warehouse${warehouses === 1 ? '' : 's'}`);
       if (products > 0) dataDetails.push(`${products} product${products === 1 ? '' : 's'}`);
       if (orders > 0) dataDetails.push(`${orders} order${orders === 1 ? '' : 's'}`);
-      
+
       throw new Error(
         `Cannot delete organization. It contains: ${dataDetails.join(', ')}. ` +
         `To delete this organization and all its data permanently, use the force delete option. ` +
@@ -259,15 +261,15 @@ export async function deleteOrganization(orgId: string, force: boolean = false) 
     }
 
     // Use transaction for atomic deletion
-    await prisma.$transaction(async (tx:any) => {
+    await prisma.$transaction(async (tx: any) => {
       if (force && (warehouses > 0 || products > 0 || orders > 0)) {
         // Delete in correct order for foreign key constraints
         await tx.orderItem.deleteMany({
           where: { order: { org_id: bigOrgId } }
         });
 
-        await tx.order.deleteMany({ 
-          where: { org_id: bigOrgId } 
+        await tx.order.deleteMany({
+          where: { org_id: bigOrgId }
         });
 
         await tx.productPrice.deleteMany({
@@ -278,24 +280,24 @@ export async function deleteOrganization(orgId: string, force: boolean = false) 
           where: { product: { org_id: bigOrgId } }
         });
 
-        await tx.product.deleteMany({ 
-          where: { org_id: bigOrgId } 
+        await tx.product.deleteMany({
+          where: { org_id: bigOrgId }
         });
 
-        await tx.warehouse.deleteMany({ 
-          where: { org_id: bigOrgId } 
+        await tx.warehouse.deleteMany({
+          where: { org_id: bigOrgId }
         });
       }
 
-      await tx.organizationInvite.deleteMany({ 
-        where: { org_id: bigOrgId } 
+      await tx.organizationInvite.deleteMany({
+        where: { org_id: bigOrgId }
       });
 
-      await tx.organizationMember.deleteMany({ 
-        where: { org_id: bigOrgId } 
+      await tx.organizationMember.deleteMany({
+        where: { org_id: bigOrgId }
       });
 
-      await tx.organization.delete({ 
+      await tx.organization.delete({
         where: { org_id: bigOrgId }
       });
     });
@@ -318,28 +320,28 @@ export async function deleteOrganization(orgId: string, force: boolean = false) 
     revalidatePath('/dashboard');
     revalidatePath('/inventory');
 
-    return { 
+    return {
       success: true,
-      message: force 
+      message: force
         ? 'Organization and all its data have been permanently deleted'
         : 'Organization deleted successfully'
     };
 
   } catch (error) {
     console.error('Error deleting organization:', error);
-    
+
     if (error instanceof Error) {
       if (error.message.includes('Cannot convert') && error.message.includes('BigInt')) {
         throw new Error('Invalid organization ID format');
       }
-      
+
       if (error.message.includes('Foreign key constraint')) {
         throw new Error('Cannot delete organization due to data dependencies. Please use force delete.');
       }
-      
+
       throw error;
     }
-    
+
     throw new Error('Failed to delete organization. Please try again.');
   }
 }
@@ -348,7 +350,7 @@ export async function deleteOrganization(orgId: string, force: boolean = false) 
 // INVITE EMPLOYEE + NOTIFY
 // ============================================
 export async function inviteEmployee(orgId: string, email: string, role: string) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
   if (!orgId) throw new Error('Organization ID is required');
   if (!email?.trim()) throw new Error('Email is required');
@@ -414,7 +416,7 @@ export async function inviteEmployee(orgId: string, email: string, role: string)
 
     if (existingInvite) {
       const isExpired = existingInvite.expires_at && new Date(existingInvite.expires_at) < new Date();
-      
+
       if (!isExpired) {
         throw new Error(
           `An invitation is already pending for ${trimmedEmail}. ` +
@@ -468,19 +470,19 @@ export async function inviteEmployee(orgId: string, email: string, role: string)
         priority: 'HIGH',
       });
     }
-    
+
 
     revalidatePath(`/organization/${orgId}`);
-    
+
     return token;
 
   } catch (error) {
     console.error('Error inviting employee:', error);
-    
+
     if (error instanceof Error) {
       throw error;
     }
-    
+
     throw new Error('Failed to send invitation. Please try again.');
   }
 }
@@ -489,7 +491,7 @@ export async function inviteEmployee(orgId: string, email: string, role: string)
 // ACCEPT INVITE + NOTIFY ALL
 // ============================================
 export async function acceptInvite(token: string) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
   if (!token?.trim()) throw new Error('Invalid invitation token');
 
@@ -536,12 +538,12 @@ export async function acceptInvite(token: string) {
     }
 
     // Use transaction for atomic operations
-    const orgId = await prisma.$transaction(async (tx :any) => {
+    const orgId = await prisma.$transaction(async (tx: any) => {
       await tx.organizationMember.create({
-        data: { 
-          org_id: invite.org_id, 
-          user_id: user.user_id, 
-          role: invite.role 
+        data: {
+          org_id: invite.org_id,
+          user_id: user.user_id,
+          role: invite.role
         },
       });
 
@@ -586,16 +588,16 @@ export async function acceptInvite(token: string) {
     await invalidateOrganizationCaches();
     revalidatePath('/organization');
     revalidatePath('/dashboard');
-    
+
     return orgId;
 
   } catch (error) {
     console.error('Error accepting invite:', error);
-    
+
     if (error instanceof Error) {
       throw error;
     }
-    
+
     throw new Error('Failed to accept invitation. Please try again.');
   }
 }
@@ -604,11 +606,11 @@ export async function acceptInvite(token: string) {
 // REMOVE MEMBER + NOTIFY
 // ============================================
 export async function removeMember(orgId: string, memberUserId: string) {
-  const { userId: currentUserId } = auth();
+  const { userId: currentUserId } = await auth();
   if (!currentUserId) throw new Error('Unauthorized');
 
   await ensureOrganizationMember(orgId);
-  
+
   const role = await getUserRole(orgId);
   if (!(await hasPermission(role, ['admin']))) {
     throw new Error('Only admins can remove members');
@@ -670,7 +672,7 @@ export async function removeMember(orgId: string, memberUserId: string) {
   // ✅ Invalidate caches - membership changed
   await invalidateOrganizationCaches();
   revalidatePath('/organization');
-  
+
   return { success: true };
 }
 
@@ -678,7 +680,7 @@ export async function removeMember(orgId: string, memberUserId: string) {
 // UPDATE MEMBER ROLE + NOTIFY
 // ============================================
 export async function updateMemberRole(orgId: string, targetUserId: string, newRole: string) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
   if (!orgId) throw new Error('Organization ID is required');
   if (!targetUserId) throw new Error('Target user ID is required');
@@ -781,18 +783,18 @@ export async function updateMemberRole(orgId: string, targetUserId: string, newR
 
   } catch (error) {
     console.error('Error updating member role:', error);
-    
+
     if (error instanceof Error) {
       throw error;
     }
-    
+
     throw new Error('Failed to update member role. Please try again.');
   }
 }
 
 
 export async function getOrganizationStats(orgId: string) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
 
   await ensureOrganizationMember(orgId);
@@ -813,7 +815,7 @@ export async function getOrganizationStats(orgId: string) {
 // GET ORGANIZATION DETAILS
 // ============================================
 export async function getOrganizationDetails(orgId: string) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
 
   await ensureOrganizationMember(orgId);
@@ -854,7 +856,7 @@ export async function getOrganizationDetails(orgId: string) {
 // GET ORGANIZATION MEMBERS
 // ============================================
 export async function getOrganizationMembers(orgId: string) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
 
   await ensureOrganizationMember(orgId);
@@ -869,7 +871,7 @@ export async function getOrganizationMembers(orgId: string) {
     orderBy: { created_at: 'asc' },
   });
 
-  return members.map((m:any) => ({
+  return members.map((m: any) => ({
     id: m.id.toString(),
     userId: m.user.user_id.toString(),
     email: m.user.email,
@@ -882,11 +884,11 @@ export async function getOrganizationMembers(orgId: string) {
 // GET ORGANIZATION INVITES
 // ============================================
 export async function getOrganizationInvites(orgId: string) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
 
   await ensureOrganizationMember(orgId);
-  
+
   const role = await getUserRole(orgId);
   if (!(await hasPermission(role, ['admin']))) {
     throw new Error('Only admins can view invitations');
@@ -897,7 +899,7 @@ export async function getOrganizationInvites(orgId: string) {
     orderBy: { created_at: 'desc' },
   });
 
-  return invites.map((i:any) => ({
+  return invites.map((i: any) => ({
     id: i.invite_id.toString(),
     email: i.email,
     role: i.role,
@@ -911,11 +913,11 @@ export async function getOrganizationInvites(orgId: string) {
 // CANCEL INVITE
 // ============================================
 export async function cancelInvite(orgId: string, inviteId: string) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Unauthorized');
 
   await ensureOrganizationMember(orgId);
-  
+
   const role = await getUserRole(orgId);
   if (!(await hasPermission(role, ['admin']))) {
     throw new Error('Only admins can cancel invitations');
@@ -926,6 +928,6 @@ export async function cancelInvite(orgId: string, inviteId: string) {
   });
 
   revalidatePath(`/organization/${orgId}`);
-  
+
   return { success: true };
 }

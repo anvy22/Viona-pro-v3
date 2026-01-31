@@ -6,7 +6,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { getUserRole, hasPermission, ensureOrganizationMember } from "@/lib/auth";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { CacheService } from "@/lib/cache";
-import { sendNotification } from "@/lib/kafka-producer";
+import { sendNotification } from "@/lib/rabbitmq";
 import type { Product } from "../api/inventory/products/route";
 
 // -----------------------------------------
@@ -21,18 +21,18 @@ function toBigInt(id: string) {
   }
 }
 
-function requireAuth() {
-  const { userId } = auth();
+async function requireAuth() {
+  const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
   return userId;
 }
 
 async function requireRole(orgId: string, perms: string[]) {
-  const userId = requireAuth();
+  const userId = await requireAuth();
   await ensureOrganizationMember(orgId);
   const role = await getUserRole(orgId);
 
-  if (!hasPermission(role, perms)) {
+  if (!await hasPermission(role, perms)) {
     throw new Error("Insufficient permissions");
   }
 
@@ -137,9 +137,9 @@ const getCachedProductDetails = unstable_cache(
       },
       modifiedBy: product.modifiedBy
         ? {
-            id: product.modifiedBy.user_id.toString(),
-            email: product.modifiedBy.email,
-          }
+          id: product.modifiedBy.user_id.toString(),
+          email: product.modifiedBy.email,
+        }
         : null,
       warehouses: product.productStocks.map((ps) => ({
         id: ps.warehouse.warehouse_id.toString(),
@@ -533,7 +533,7 @@ export async function deleteProduct(orgId: string, productId: string) {
     if (orderItems) {
       throw new Error(
         `Cannot delete product "${product.name}" because it has been ordered. ` +
-          `Consider deactivating it instead.`
+        `Consider deactivating it instead.`
       );
     }
 
@@ -682,8 +682,8 @@ export async function bulkUpdateProducts(
 
           updateResults.push({
             productId: updatedProduct.product_id.toString(),
-            name: updatedProduct.name,
-            sku: updatedProduct.sku,
+            name: updatedProduct.name || "",
+            sku: updatedProduct.sku || "",
           });
         }
 
@@ -732,7 +732,7 @@ export async function warmupProductCache(orgId: string) {
   try {
     await ensureOrganizationMember(orgId);
     const role = await getUserRole(orgId);
-    if (!hasPermission(role, ["reader", "writer", "read-write", "admin"])) {
+    if (!await hasPermission(role, ["reader", "writer", "read-write", "admin"])) {
       throw new Error("Insufficient permissions to access products");
     }
 
@@ -920,8 +920,7 @@ export async function deleteProductDetails(orgId: string, productId: string) {
       const orderDetails = orderItems
         .map(
           (item) =>
-            `Order #${item.order.order_id} (${
-              item.order.customer_name || "Unknown Customer"
+            `Order #${item.order.order_id} (${item.order.customer_name || "Unknown Customer"
             })`
         )
         .slice(0, 3)
@@ -932,8 +931,8 @@ export async function deleteProductDetails(orgId: string, productId: string) {
 
       throw new Error(
         `Cannot delete product "${product.name}" because it has been ordered. ` +
-          `Referenced in: ${orderDetails}${moreOrders}. ` +
-          `Consider deactivating the product instead.`
+        `Referenced in: ${orderDetails}${moreOrders}. ` +
+        `Consider deactivating the product instead.`
       );
     }
 
@@ -980,7 +979,7 @@ export async function updateProductStock(
   warehouseId: string,
   adjustment: number
 ) {
-  const userId = requireAuth();
+  const userId = await requireAuth();
   if (!orgId) throw new Error("Organization ID is required");
   if (!productId) throw new Error("Product ID is required");
   if (!warehouseId) throw new Error("Warehouse ID is required");
@@ -1050,9 +1049,8 @@ export async function updateProductStock(
     await sendNotification({
       userId: user.clerk_id,
       title: "Stock Updated",
-      message: `Stock for "${product?.name}" at ${warehouse?.name}: ${
-        adjustment > 0 ? "+" : ""
-      }${adjustment} (New: ${newQuantity})`,
+      message: `Stock for "${product?.name}" at ${warehouse?.name}: ${adjustment > 0 ? "+" : ""
+        }${adjustment} (New: ${newQuantity})`,
       type: "system",
       priority: newQuantity < 10 ? "HIGH" : "MEDIUM",
       link: `/inventory/${orgId}`,
@@ -1120,13 +1118,13 @@ export async function transferStock(
         where: { product_id: bigPid, warehouse_id: bigFromWarehouse },
       });
 
-      if (!fromStock || fromStock.quantity < quantity) {
+      if (!fromStock || (fromStock.quantity || 0) < quantity) {
         throw new Error("Insufficient stock in source warehouse");
       }
 
       await tx.productStock.update({
         where: { stock_id: fromStock.stock_id },
-        data: { quantity: fromStock.quantity - quantity },
+        data: { quantity: (fromStock.quantity || 0) - quantity },
       });
 
       const toStock = await tx.productStock.findFirst({
@@ -1136,7 +1134,7 @@ export async function transferStock(
       if (toStock) {
         await tx.productStock.update({
           where: { stock_id: toStock.stock_id },
-          data: { quantity: toStock.quantity + quantity },
+          data: { quantity: (toStock.quantity || 0) + quantity },
         });
       } else {
         await tx.productStock.create({

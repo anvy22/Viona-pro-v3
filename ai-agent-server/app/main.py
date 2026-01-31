@@ -27,14 +27,15 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.app_name}")
 
     # Initialize connections
-    from app.tokens.publisher import get_kafka_publisher
+    from app.tokens.publisher import get_rabbitmq_connection, close_rabbitmq_connection
     from app.memory.redis_memory import get_redis_client
     from app.observability.logger import get_mongo_client
 
     # Connect to services
     redis = await get_redis_client()
     mongo = await get_mongo_client()
-    kafka = await get_kafka_publisher()
+    # Pre-connect to RabbitMQ
+    await get_rabbitmq_connection()
 
     logger.info("All services connected")
 
@@ -42,8 +43,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down...")
-    if kafka:
-        await kafka.stop()
+    await close_rabbitmq_connection()
     if redis:
         await redis.close()
     if mongo:

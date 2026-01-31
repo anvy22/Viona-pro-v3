@@ -39,27 +39,27 @@ import { useTheme } from "next-themes";
 /* ---------------- Node Types ---------------- */
 
 const nodeTypes = {
-  "trigger.manual": TriggerNode,
-  "trigger.event": EventTriggerNode,
-  "trigger.schedule": ScheduleTriggerNode,
+    "trigger.manual": TriggerNode,
+    "trigger.event": EventTriggerNode,
+    "trigger.schedule": ScheduleTriggerNode,
 
-  "action.http": HttpNode,
-  "action.slack.sendMessage": SlackNode,
-  "action.googleSheets.appendRow": GoogleSheetsNode,
-  "action.discord.sendMessage": DiscordNode,
-  "action.airtable.createRecord": AirtableNode,
-  "action.github.createIssue": GitHubNode,
-  "action.notion.createPage": NotionNode,
-  "action.notify": NotifyNode,
-  "action.delay": DelayNode,
-  "action.update_inventory": UpdateInventoryNode,
+    "action.http": HttpNode,
+    "action.slack.sendMessage": SlackNode,
+    "action.googleSheets.appendRow": GoogleSheetsNode,
+    "action.discord.sendMessage": DiscordNode,
+    "action.airtable.createRecord": AirtableNode,
+    "action.github.createIssue": GitHubNode,
+    "action.notion.createPage": NotionNode,
+    "action.notify": NotifyNode,
+    "action.delay": DelayNode,
+    "action.update_inventory": UpdateInventoryNode,
 
-  "ai.prompt": AIPromptNode,
-  "ai.agent": AIAgentNode,
-  "ai.chat_model": ChatModelNode,
-  "ai.memory": MemoryNode,
+    "ai.prompt": AIPromptNode,
+    "ai.agent": AIAgentNode,
+    "ai.chat_model": ChatModelNode,
+    "ai.memory": MemoryNode,
 
-  "condition.if": ConditionNode,
+    "condition.if": ConditionNode,
 };
 
 /* ---------------- Props ---------------- */
@@ -100,9 +100,9 @@ export default function Canvas({
             definition.nodes.map(n => ({
                 id: n.id,
                 type: n.type,
-                position: n.position,
+                position: n.position || { x: 0, y: 0 },
                 data: {
-                    node: n, 
+                    node: n,
                 },
             })),
         [definition.nodes]

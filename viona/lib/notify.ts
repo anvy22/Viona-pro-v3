@@ -1,4 +1,4 @@
-import { sendNotification } from '@/lib/kafka-producer';
+import { sendNotification } from '@/lib/rabbitmq';
 
 export function notifyAsync(payload: any) {
   queueMicrotask(() => {

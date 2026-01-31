@@ -16,9 +16,9 @@ const getCachedUser = unstable_cache(
       where: { clerk_id: clerkId },
       select: { user_id: true, email: true, clerk_id: true }
     });
-    
+
     if (!user) return null;
-    
+
     // FIXED: Convert BigInt to string for caching
     return {
       user_id: user.user_id.toString(),
@@ -34,7 +34,7 @@ const getCachedOrgMembership = unstable_cache(
   async (orgId: string, userId: string) => {
     const bigOrgId = BigInt(orgId);
     const bigUserId = BigInt(userId);
-    
+
     const org = await prisma.organization.findUnique({
       where: { org_id: bigOrgId },
       select: {
@@ -69,31 +69,31 @@ const getCachedOrgMembership = unstable_cache(
 
 async function getOrCreateUser(userId: string) {
   let user = await getCachedUser(userId);
-  
+
   if (!user) {
     const clerkUser = await currentUser();
     if (!clerkUser?.emailAddresses[0]?.emailAddress) {
       throw new Error('Unable to get user email');
     }
-    
+
     const newUser = await prisma.user.create({
-      data: { 
-        clerk_id: userId, 
+      data: {
+        clerk_id: userId,
         email: clerkUser.emailAddresses[0].emailAddress
       },
       select: { user_id: true, email: true, clerk_id: true }
     });
-    
+
     // FIXED: Convert BigInt to string
     user = {
       user_id: newUser.user_id.toString(),
       email: newUser.email,
       clerk_id: newUser.clerk_id
     };
-    
+
     revalidateTag('user');
   }
-  
+
   return user;
 }
 
@@ -102,11 +102,11 @@ async function ensureCreatorAdminRecord(orgId: string, userId: string) {
   const bigUserId = BigInt(userId);
 
   await prisma.organizationMember.upsert({
-    where: { 
-      org_id_user_id: { 
-        org_id: bigOrgId, 
-        user_id: bigUserId 
-      } 
+    where: {
+      org_id_user_id: {
+        org_id: bigOrgId,
+        user_id: bigUserId
+      }
     },
     update: { role: 'admin' },
     create: {
@@ -115,7 +115,7 @@ async function ensureCreatorAdminRecord(orgId: string, userId: string) {
       role: 'admin'
     }
   });
-  
+
   revalidateTag('org-member');
 }
 
@@ -124,7 +124,7 @@ async function ensureCreatorAdminRecord(orgId: string, userId: string) {
 // ============================================
 
 export async function getUserRole(orgId: string): Promise<string | null> {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) return null;
 
   try {
@@ -143,13 +143,13 @@ export async function hasPermission(role: string | null, requiredRoles: string[]
   if (!role || role === "null" || role === "undefined" || role === "" || role === "NULL") {
     return false;
   }
-  
+
   if (role === 'admin') return true;
   return requiredRoles.includes(role);
 }
 
 export async function ensureOrganizationMember(orgId: string): Promise<void> {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Authentication required');
 
   if (!orgId || orgId.trim() === '' || orgId === 'undefined' || orgId === 'null') {
@@ -188,14 +188,14 @@ export async function ensureOrganizationMember(orgId: string): Promise<void> {
 }
 
 export async function getUserWithPermissions(
-  orgId: string, 
+  orgId: string,
   requiredRoles: string[]
 ) {
-  const { userId } = auth();
+  const { userId } = await auth();
   if (!userId) throw new Error('Authentication required');
 
   await ensureOrganizationMember(orgId);
-  
+
   const role = await getUserRole(orgId);
   if (!role || !(await hasPermission(role, requiredRoles))) {
     throw new Error(`Insufficient permissions. Required: ${requiredRoles.join(', ')}`);
@@ -225,9 +225,9 @@ export async function debugUserOrgs(userId: string) {
           select: { org_id: true, name: true }
         },
         organizationMembers: {
-          select: { 
+          select: {
             role: true,
-            org: { 
+            org: {
               select: { org_id: true, name: true }
             }
           }
@@ -238,14 +238,14 @@ export async function debugUserOrgs(userId: string) {
     if (process.env.NODE_ENV === 'development') {
       console.log('Debug User Organizations:', {
         user: user?.user_id.toString(),
-        createdOrgs: user?.createdOrganizations.map(o => ({ 
-          id: o.org_id.toString(), 
-          name: o.name 
+        createdOrgs: user?.createdOrganizations.map(o => ({
+          id: o.org_id.toString(),
+          name: o.name
         })),
-        memberOrgs: user?.organizationMembers.map(m => ({ 
-          org_id: m.org.org_id.toString(), 
-          org_name: m.org.name, 
-          role: m.role 
+        memberOrgs: user?.organizationMembers.map(m => ({
+          org_id: m.org.org_id.toString(),
+          org_name: m.org.name,
+          role: m.role
         }))
       });
     }

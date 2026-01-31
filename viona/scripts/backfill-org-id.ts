@@ -4,7 +4,7 @@ async function backfillOrgId(defaultOrgId: string) {
   const orgId = BigInt(defaultOrgId);
 
   await prisma.product.updateMany({
-    where: { org_id: null },
+    where: { org_id: undefined },
     data: { org_id: orgId },
   });
 

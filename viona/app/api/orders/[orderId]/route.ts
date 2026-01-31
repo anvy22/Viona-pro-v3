@@ -6,16 +6,17 @@ import { ensureOrganizationMember } from '@/lib/auth';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { orderId: string } }
+  { params }: { params: Promise<{ orderId: string }> }
 ) {
-  const { userId } = auth();
+  const { orderId } = await params;
+  const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
+
   const orgId = searchParams.get('orgId');
-  const { orderId } = params;
 
   if (!orgId) {
     return NextResponse.json({ error: 'Organization ID is required' }, { status: 400 });
@@ -105,7 +106,7 @@ export async function GET(
         subtotal: (item.quantity || 0) * (Number(item.price_at_order) || 0),
       })),
       financialBreakdown: {
-        subtotal: order.orderItems.reduce((sum, item) => 
+        subtotal: order.orderItems.reduce((sum, item) =>
           sum + ((item.quantity || 0) * (Number(item.price_at_order) || 0)), 0),
         tax: 0, // Calculate if you have tax logic
         shipping: 0, // Calculate if you have shipping logic
